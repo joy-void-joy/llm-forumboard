@@ -1,0 +1,100 @@
+<!-- Generated from lup.devtools.harness.content.docs.quality_pipeline by `uv run lup-devtools harness generate all` — edit the source, not this file. See docs/harness.md. -->
+
+# Quality pipeline
+
+Three layers guard the repository. Each runs at a different moment and
+catches a class of problem the others cannot.
+
+## Commit time: the drift guard
+
+`uv run lup-devtools dev commit-guard install` writes a git `pre-commit` hook
+whose body is one command — `uv run lup-devtools harness check all` — so a
+commit is refused while any generated artifact differs from what its source
+renders. `dev worktree create` arms it, re-running install refreshes a body
+left by an older library, `dev commit-guard status` says what a clone would
+run, and `uninstall` removes it. A `pre-commit` hook written by anything else
+is reported rather than replaced.
+
+That command is the same one the pipeline runs and the same drift verdict
+`dev check` reports, so the three places that can refuse stale output reach
+one computation instead of three that can disagree.
+
+The check reads every generated artifact every time, with no path pattern
+deciding when it applies. It costs well under a second, and the alternative
+is a second belief about which commits could change generated output: the
+sources compiled into the plugin trees are copied there verbatim, so
+rewording a comment in one makes both trees stale without changing anything
+either does.
+
+Unique catch: a canonical harness edit committed without its regenerated
+artifacts, or a hand-edit to an owned artifact, is refused before the commit
+exists instead of minutes later in CI. Formatting, lint, type, and test
+problems are deliberately not duplicated at commit time; the per-push gate
+below owns them. Two things a hook cannot refuse: a partial stage — canonical
+source staged while its regenerated artifacts sit unstaged in an otherwise
+current worktree — because it reads the worktree rather than the index, and a
+`--no-verify` commit, which skips every hook by asking to. Both are the layer
+below's, which is why both layers exist.
+
+## Every pull request and push: quality and harness drift
+
+`.github/workflows/quality.yml` runs on every pull request and on pushes to
+`main` and `dev`. Its first step is `harness check all` — the same command
+the commit hook installs, spelled from the same constant — and its second is
+`dev check`: `ruff format --check`, `ruff check`, `pyright`, both `pytest`
+suites, the review-note report, the anti-pattern rules, the native seam
+boundaries, library placement, generated-tree drift, and the guidance budget.
+
+Unique catch: this is the authoritative gate. It binds whether or not a
+contributor armed the commit guard, and it is the only layer that runs the
+full static and unit-test bar. It never regenerates or commits.
+
+## Scheduled: native nightly
+
+`.github/workflows/native-nightly.yml` runs on a daily cron and on manual
+dispatch. The deterministic `evidence` job installs the real Claude and
+Codex CLIs and runs `uv run lup-devtools harness doctor all
+--strict-evidence` against the typed evidence ledger. The secrets-gated
+`native` job runs the full `pytest -m integration` lane across the installed
+CLIs.
+
+Unique catch: breakage observable only through a real native CLI boundary —
+installed-version drift against the evidence ledger, and live hook, plugin,
+and session behavior — which is too slow and credential-bound for the
+per-push gate. Release-evidence rules for this lane are in
+[contributing.md](contributing.md).
+
+## What a project built on lup runs in CI
+
+One command:
+
+```yaml
+- run: uv run lup-devtools dev check
+```
+
+That is deliberately the whole of the gate. `dev check` is the same bar a
+checkout runs locally — format, lint, types, tests, review notes,
+anti-patterns, seam boundaries, library placement, generated-tree drift, and
+the guidance budget — so a green local run and a green pipeline cannot mean
+different things. Putting `harness check all` in a step ahead of it, as this
+repository does, buys a faster and more specific refusal of the one failure
+a contributor can produce without running anything; it reads the same verdict
+either way.
+
+`uv run lup-devtools dev commit-guard install` is the local half, and it is
+the project's to arm rather than the framework's to impose: it writes into
+`.git`, which is the contributor's, not the repository's.
+
+Nothing is generated into an adopter's `.github/`. A workflow file is the
+project's own, and a framework that wrote one would be claiming a schedule,
+a runner, and a trigger policy that are not its to choose. This repository
+generates its own `quality.yml` because it is *this* project's workflow; an
+adopter writes the three lines above wherever its pipeline lives.
+
+## Why the guard runs at commit time and in CI
+
+ADR-013 in [dev-tooling-decisions.md](dev-tooling-decisions.md) records the
+decision: a check that runs when somebody remembers to run it is a warning,
+so the drift check sits on the path a commit must cross. The hook catches it
+before history is written; the pipeline catches a hook nobody installed, and
+the partial stage a worktree read cannot see.

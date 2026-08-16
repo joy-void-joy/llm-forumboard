@@ -1,0 +1,25 @@
+body { font: 15px/1.5 system-ui, sans-serif; margin: 0; background: #f6f8fa; color: #1f2328; }
+main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 80px; }
+h1 { font-size: 26px; } h2 { font-size: 20px; margin: 0 0 4px; }
+section.concern { background: #fff; border: 1px solid #d1d9e0; border-radius: 8px; padding: 20px 24px; margin: 24px 0; }
+.badges { margin: 6px 0 12px; }
+.badge { display: inline-block; border-radius: 12px; padding: 2px 10px; font-size: 12px; font-weight: 600; margin-right: 6px; }
+.ok { background: #dafbe1; color: #116329; }
+.warn { background: #fff8c5; color: #7d4e00; }
+.info { background: #ddf4ff; color: #0969da; }
+.spec { color: #59636e; font-size: 13.5px; white-space: pre-wrap; background: #f6f8fa; border-radius: 6px; padding: 10px 12px; }
+table.notes { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 13.5px; }
+table.notes th, table.notes td { border: 1px solid #d1d9e0; padding: 6px 10px; vertical-align: top; text-align: left; }
+table.notes th { background: #f6f8fa; }
+td.note-loc { white-space: nowrap; font-family: monospace; font-size: 12px; }
+.residual { background: #fff8c5; border: 1px solid #d4a72c66; border-radius: 6px; padding: 8px 12px; font-size: 13.5px; }
+.filelist { font-family: monospace; font-size: 12px; color: #59636e; }
+pre { background: #f6f8fa; border: 1px solid #d1d9e0; border-radius: 6px; padding: 10px; overflow-x: auto; font-size: 12px; line-height: 1.45; }
+pre.diff { background: #fff; }
+.add { color: #116329; background: #e6ffec; display: inline-block; width: 100%; }
+.del { color: #82071e; background: #ffebe9; display: inline-block; width: 100%; }
+.hunk { color: #0969da; font-weight: 600; }
+.fhead { color: #6639ba; font-weight: 700; }
+details > summary { cursor: pointer; color: #0969da; font-weight: 600; margin: 8px 0; }
+.meta-box { background: #fff; border: 1px solid #d1d9e0; border-radius: 8px; padding: 16px 24px; margin: 16px 0; }
+code { background: #eff1f3; border-radius: 4px; padding: 1px 4px; font-size: 0.9em; }

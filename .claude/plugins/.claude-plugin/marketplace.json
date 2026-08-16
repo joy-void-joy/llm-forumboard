@@ -1,0 +1,13 @@
+{
+  "name": "lup-template-repository",
+  "owner": {
+    "name": "Lup"
+  },
+  "plugins": [
+    {
+      "description": "Self-improvement harness with feedback, review, and safe resolution flows",
+      "name": "lup",
+      "source": "./lup"
+    }
+  ]
+}

@@ -1,0 +1,65 @@
+name: Native nightly
+
+# Deterministic evidence checks run without provider credentials. The live job
+# is secrets-gated because every smoke crosses a real native CLI boundary.
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+jobs:
+  evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: "3.14"
+      - run: uv sync --all-extras
+      - name: Install native CLIs
+        run: |
+          npm install -g @anthropic-ai/claude-code
+          npm install -g @openai/codex
+      - name: Doctor with evidence-ledger drift check
+        run: uv run lup-devtools harness doctor all --strict-evidence
+
+  credentials:
+    runs-on: ubuntu-latest
+    outputs:
+      live: ${{ steps.detect.outputs.live }}
+    steps:
+      - id: detect
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          if [ -n "$ANTHROPIC_API_KEY" ] && [ -n "$OPENAI_API_KEY" ]; then
+            echo "live=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "live=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  native:
+    needs: [evidence, credentials]
+    if: ${{ always() && needs.credentials.outputs.live == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: "3.14"
+      - run: uv sync --all-extras
+      - name: Install native CLIs
+        run: |
+          npm install -g @anthropic-ai/claude-code
+          npm install -g @openai/codex
+      - name: Full integration lane
+        run: uv run pytest -m integration -v

@@ -1,0 +1,11 @@
+# The ownership manifests are generated digest proofs: every field is derived
+# from the sources, so merging their text is meaningless — two branches always
+# disagree on source_digest and on every sha256 a regeneration touched. The
+# `lup-ownership` driver keeps one side so the merge resolves, and the next
+# `lup-devtools harness generate` settles the digests against the merged tree.
+#
+# The driver is per-clone git config, which no repository can ship. Register it
+# with `lup-devtools dev merge-driver`; without it git falls back to the text
+# merge and these files conflict as they did before.
+.claude/.lup-ownership.json merge=lup-ownership
+.codex/.lup-ownership.json merge=lup-ownership

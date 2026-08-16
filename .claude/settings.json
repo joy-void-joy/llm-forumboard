@@ -1,0 +1,93 @@
+{
+  "coauthorship": false,
+  "enabledPlugins": {
+    "agent-sdk-dev@claude-plugins-official": true,
+    "claude-md-management@claude-plugins-official": true,
+    "github@claude-plugins-official": true,
+    "lup@lup-template-repository": true
+  },
+  "env": {
+    "ENABLE_TOOL_SEARCH": "false"
+  },
+  "extraKnownMarketplaces": {
+    "lup-template-repository": {
+      "source": {
+        "path": "./.claude/plugins",
+        "source": "directory"
+      }
+    }
+  },
+  "fileSuggestion": {
+    "command": ".claude/plugins/lup/scripts/file_suggest.sh",
+    "type": "command"
+  },
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "Skill(lup:hooks)",
+      "EnterWorktree",
+      "ExitWorktree",
+      "Read(./.claude/settings.json.local*)",
+      "Read(./sync.json.local)",
+      "Read(./downstream.json.local)",
+      "mcp__plugin_lup_notes",
+      "mcp__plugin_lup_sandbox",
+      "mcp__plugin_lup_codeintel"
+    ],
+    "deny": [
+      "Read(./**/.env*.local)",
+      "Read(./**/.env.local)",
+      "Read(./**/secrets*.local)",
+      "Read(./**/*.secret.local)"
+    ]
+  },
+  "sandbox": {
+    "credentials": {
+      "files": [
+        {
+          "mode": "deny",
+          "path": "~/.ssh"
+        },
+        {
+          "mode": "deny",
+          "path": "~/.aws/credentials"
+        }
+      ]
+    },
+    "enabled": true,
+    "excludedCommands": [
+      "uv run lup-devtools py eval *",
+      "ssh *",
+      "git *",
+      "gh *"
+    ],
+    "filesystem": {
+      "allowWrite": [
+        "~/.cache/uv"
+      ],
+      "denyWrite": [
+        "README.md"
+      ]
+    },
+    "network": {
+      "allowedDomains": [
+        "docs.claude.com",
+        "code.claude.com",
+        "platform.claude.com",
+        "claude.ai",
+        "ai.pydantic.dev",
+        "learn.chatgpt.com",
+        "developers.openai.com",
+        "github.com",
+        "api.github.com",
+        "githubusercontent.com",
+        "*.githubusercontent.com",
+        "pypi.org",
+        "files.pythonhosted.org",
+        "127.0.0.1",
+        "localhost",
+        "api.anthropic.com"
+      ]
+    }
+  }
+}

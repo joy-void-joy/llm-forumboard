@@ -1,0 +1,97 @@
+[project]
+name = "lup"
+version = "0.2.0"
+description = "Agent development library for Claude and Codex agent SDKs"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.14"
+authors = [{ name = "Joy Void Joy", email = "joy.void.joy@gmail.com" }]
+keywords = ["agent", "ai", "claude", "llm", "mcp", "sdk", "tools"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+    "Typing :: Typed",
+]
+dependencies = [
+    "httpx>=0.28.1",
+    "markdown-it-py>=4.2.0",
+    "mcp>=1.27.0",
+    "packaging>=26.2",
+    "pydantic>=2.12.5",
+    "pydantic-settings>=2.14.1",
+    "pyjwt>=2.13.0",
+    "rich>=14.3.1",
+    "sh>=2.2.2",
+    "tenacity>=9.0.0",
+    "tomlkit>=0.15.0",
+    "typer>=0.21.1",
+]
+
+[project.optional-dependencies]
+claude = [
+    "claude-agent-sdk>=0.2.89",
+]
+codex = []
+docker = ["docker>=7.1.0"]
+web = [
+    "fastapi>=0.139.0",
+    "google-auth-oauthlib>=1.4.0",
+    "uvicorn[standard]>=0.49.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/joy-void-joy/lup"
+Repository = "https://github.com/joy-void-joy/lup"
+Issues = "https://github.com/joy-void-joy/lup/issues"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+lup = ["py.typed"]
+"lup.adapters.claude" = ["assets/*.py"]
+"lup.adapters.codex" = ["assets/*.py"]
+"lup.policy" = ["assets/*.py"]
+"lup.devtools.supervisor" = ["assets/*.html"]
+"lup.devtools.dev" = ["*.css"]
+
+# Independent of the workspace-root selection, and deliberately so: run from
+# this directory the suite sees `src` alone, so a library test that reached
+# for the application would fail here while still passing at the root. That
+# is the whole reason the two suites are separate rather than one selection.
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["src", "."]
+addopts = "-m 'not integration'"
+markers = ["integration: tests requiring external services (Docker, APIs)"]
+
+[tool.pyright]
+# Independent of the workspace-root config: this lets the standalone library
+# type-check on its own (pyright run from this directory), where `src` resolves
+# to packages/lup/src. The root config re-lists this path under its own include
+# for the workspace-wide run; the two configs do not merge or conflict.
+include = ["src"]
+pythonVersion = "3.14"
+
+# `kernel`, `policy_data`, and `codex_patch` are top-level modules only inside
+# a generated plugin's `hooks/runtime`, so each dispatcher asset resolves them
+# against the tree the surrounding repository generates — the same layout the
+# workspace-root config names, reached from this directory. `host` is the half
+# the compiler links in rather than ships, so an asset resolves it against the
+# canonical module both scripts are compiled from.
+[[tool.pyright.executionEnvironments]]
+root = "src/lup/adapters/claude/assets"
+extraPaths = ["../../.claude/plugins/lup/hooks/runtime", "src/lup/policy/assets"]
+
+[[tool.pyright.executionEnvironments]]
+root = "src/lup/adapters/codex/assets"
+extraPaths = ["../../.codex/plugins/lup/hooks/runtime", "src/lup/policy/assets"]
