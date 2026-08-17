@@ -103,23 +103,46 @@ def browser_report() -> list[str]:
     ]
 
 
+def roster_report() -> list[str]:
+    """Who a sync pass will actually read.
+
+    Reported beside Notion because a deployment can be green everywhere else
+    and still publish nothing: enrolment is a committed file rather than a
+    setting, so nothing in the environment says whether anybody is in it.
+    """
+    from lup.workspace.paths import project_root
+
+    from forumboard.profiles import profile_states, profiles_root
+
+    root = project_root()
+    states = profile_states(root, profiles_root(root))
+    syncable = [state for state in states if state.syncable()]
+    if syncable:
+        return [f"profiles: reading {', '.join(state.name for state in syncable)}"]
+    return [
+        "profiles: NOT reading anybody — run `forumboard setup profiles` to "
+        "sign somebody in and enrol them",
+        *(f"  {state.describe()}" for state in states),
+    ]
+
+
 async def configuration_report() -> list[str]:
     """Lines describing whether this deployment can run, for a doctor command.
 
     Reports rather than raises: somebody checking their setup wants every
     problem at once, and the first one is rarely the only one.
     """
-    browser = browser_report()
+    local = [*browser_report(), *roster_report()]
     if not settings.notion_token:
-        return [*browser, "NOTION_TOKEN is not set — run `forumboard setup notion`"]
+        return [*local, "NOTION_TOKEN is not set — run `forumboard setup notion`"]
     workspace = NotionWorkspace(settings.notion_token)
     shapes = DatabaseShapes()
     try:
         identity = await workspace.whoami()
     except NotionError as error:
-        return [*browser, f"the token was rejected: {error}"]
+        return [*local, f"the token was rejected: {error}"]
 
-    lines = [*browser, f"connected as {identity}"]
+    lines = [*local, f"connected as {identity}"]
     for label, database_id, shape in (
         ("Discussions", settings.notion_discussions_database_id, shapes.discussions),
         ("Worldview", settings.notion_worldview_database_id, shapes.worldview),
