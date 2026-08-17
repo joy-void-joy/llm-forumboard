@@ -14,7 +14,7 @@ import pytest
 import typer
 
 from lup.types import JsonValue
-from lup_template.devtools.dev import library
+from forumboard.devtools.dev import library
 
 VENDORED_PYPROJECT = """\
 [project]

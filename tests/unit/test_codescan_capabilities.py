@@ -27,7 +27,7 @@ def test_an_application_module_resolves_from_its_own_root() -> None:
     application = DevProject(package="lup_template")
     assert module_name(
         Path("src/lup_template/devtools/app.py"), scanned_roots(application)
-    ) == ("lup_template.devtools.app")
+    ) == ("forumboard.devtools.app")
     assert module_name(Path("src/lup_template/devtools/app.py")) == (
         "src.lup_template.devtools.app"
     )

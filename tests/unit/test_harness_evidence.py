@@ -11,7 +11,7 @@ from lup.devtools.dev.workflow import (
     WORKFLOW_PATH,
     write_workflow,
 )
-from lup_template.devtools.harness.catalog import WORKFLOW
+from forumboard.devtools.harness.catalog import WORKFLOW
 from lup.devtools.harness.evidence import (
     EVIDENCE_LEDGER,
     EvidenceEntry,

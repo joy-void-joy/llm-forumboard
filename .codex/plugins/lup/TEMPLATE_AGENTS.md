@@ -1,4 +1,4 @@
-<!-- Generated from lup_template.devtools.harness.content.template_codex by `uv run lup-devtools harness generate all` — edit the source, not this file. See docs/harness.md. -->
+<!-- Generated from forumboard.devtools.harness.content.template_codex by `uv run lup-devtools harness generate all` — edit the source, not this file. See docs/harness.md. -->
 
 # AGENTS.md Template
 

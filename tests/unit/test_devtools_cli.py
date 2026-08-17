@@ -20,7 +20,7 @@ import typer
 from typer.testing import CliRunner
 
 from lup.devtools.dev import pr
-from lup_template.devtools.main import app
+from forumboard.devtools.main import app
 from lup.devtools.sync import load_json
 
 # Typer renders usage errors through Rich, which styles option tokens whenever

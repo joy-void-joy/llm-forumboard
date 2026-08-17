@@ -13,7 +13,7 @@ from pathlib import Path
 
 from lup.sandbox.container import Sandbox
 
-from lup_template.agent.toolsets import (
+from forumboard.agent.toolsets import (
     EXAMPLE_GROUP,
     SessionToolset,
     build_session_toolset,

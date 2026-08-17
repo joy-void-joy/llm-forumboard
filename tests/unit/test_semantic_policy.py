@@ -82,8 +82,8 @@ from lup.policy.rules import (
 )
 
 from lup.policy.vocabulary import runner_target_rules
-from lup_template.devtools.harness.catalog import declared_hook_set, portable_harness
-from lup_template.devtools.harness.content.shell_vocabulary import SHELL_RULES
+from forumboard.devtools.harness.catalog import declared_hook_set, portable_harness
+from forumboard.devtools.harness.content.shell_vocabulary import SHELL_RULES
 
 
 class DecisionCase(BaseModel, frozen=True):

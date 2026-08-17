@@ -7,7 +7,7 @@ import pytest
 from typer.testing import CliRunner
 
 from lup.devtools.dev import issues
-from lup_template.devtools.main import app
+from forumboard.devtools.main import app
 
 
 def friction_report() -> issues.FrictionReport:

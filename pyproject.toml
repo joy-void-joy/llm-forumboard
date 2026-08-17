@@ -1,7 +1,7 @@
 [project]
-name = "lup-template"
+name = "forumboard"
 version = "0.2.0"
-description = "Self-improving agent template with feedback loop, built with the Claude Agent SDK"
+description = "Reviews claude.ai conversations into a redacted Notion discussion archive and a rewritten current worldview"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.14"
@@ -10,10 +10,10 @@ keywords = [
     "agent",
     "ai",
     "claude",
-    "feedback-loop",
+    "conversations",
     "llm",
-    "self-improving",
-    "template",
+    "notion",
+    "redaction",
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -27,10 +27,13 @@ classifiers = [
 dependencies = [
     "fastapi>=0.139.0",
     "httpx>=0.28.1",
-    "lup[claude,codex,docker,web]",
+    "lup[claude,codex,web]",
+    "notion-client>=3.1.0",
     "packaging>=26.2",
+    "playwright>=1.62.0",
     "prompt-toolkit>=3.0.52",
     "pydantic-settings>=2.12.0",
+    "pyvirtualdisplay>=3.0",
     "sh>=2.4.0",
     "tomlkit>=0.15.0",
     "typer>=0.21.1",
@@ -39,13 +42,13 @@ dependencies = [
 ]
 
 [project.scripts]
-lup = "lup_template.environment.cli.__main__:app"
-lup-devtools = "lup_template.devtools.main:app"
+forumboard = "forumboard.environment.cli.__main__:app"
+lup-devtools = "forumboard.devtools.main:app"
 
 [project.urls]
-Homepage = "https://github.com/joy-void-joy/lup"
-Repository = "https://github.com/joy-void-joy/lup"
-Issues = "https://github.com/joy-void-joy/lup/issues"
+Homepage = "https://github.com/joy-void-joy/llm-forumboard"
+Repository = "https://github.com/joy-void-joy/llm-forumboard"
+Issues = "https://github.com/joy-void-joy/llm-forumboard/issues"
 
 [dependency-groups]
 dev = [
@@ -62,25 +65,17 @@ dev = [
 where = ["src"]
 
 [tool.setuptools.package-data]
-"lup_template.devtools.dashboard" = ["assets/*.html"]
-"lup_template.devtools.harness.content" = ["assets/*.js", "assets/*.sh"]
+"forumboard.devtools.dashboard" = ["assets/*.html"]
+"forumboard.devtools.harness.content" = ["assets/*.js", "assets/*.sh"]
 
 [tool.lup]
 agent_version = "0.2.0"
-# This repository is the scaffold itself, so its `# lup: template:` markers are
-# inventory rather than outstanding work. `dev init` clears this when a domain
-# adopts the template, and from then on `dev check` lists every marker still
-# standing. Never set it in a repository built from this one.
-template = true
 
 [tool.uv]
 exclude-newer = "3 days"
 
-[tool.uv.workspace]
-members = ["packages/*"]
-
 [tool.uv.sources]
-lup = { workspace = true }
+lup = {git = "https://github.com/joy-void-joy/lup", branch = "dev", subdirectory = "packages/lup"}
 
 [build-system]
 requires = ["setuptools>=61.0"]
@@ -89,7 +84,7 @@ build-backend = "setuptools.build_meta"
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-pythonpath = ["src", "packages/lup/src"]
+pythonpath = ["src"]
 addopts = "-m 'not integration'"
 markers = ["integration: tests requiring external services (Docker, APIs)"]
 
@@ -100,15 +95,7 @@ markers = ["integration: tests requiring external services (Docker, APIs)"]
 # only this root config when invoked here — it does not discover the member
 # config in packages/lup/pyproject.toml — so every include the workspace
 # needs is listed.
-include = [
-    "src",
-    "packages/lup/src",
-    "tests",
-    "packages/lup/tests",
-    "examples",
-    ".claude/plugins/lup/hooks",
-    ".codex/plugins/lup/hooks",
-]
+include = ["src", "tests", "examples", ".claude/plugins/lup/hooks", ".codex/plugins/lup/hooks"]
 pythonVersion = "3.14"
 venvPath = "."
 venv = ".venv"
@@ -120,40 +107,12 @@ venv = ".venv"
 # the compiler links in rather than ships, so an asset resolves it against the
 # canonical module both scripts are compiled from.
 [[tool.pyright.executionEnvironments]]
-# The kernel-aware shared half calls the kernel and is spliced into every
-# generated script, so it reads against a generated runtime for the same
-# reason an adapter half does. Both trees are named because neither runtime
-# owns this half: they carry the same kernel and the same policy_data names,
-# so either resolves it, and naming only one would leave a workspace that has
-# generated the other unable to check the file at all.
-root = "packages/lup/src/lup/policy/assets"
-extraPaths = [
-    ".claude/plugins/lup/hooks/runtime",
-    ".codex/plugins/lup/hooks/runtime",
-]
-
-[[tool.pyright.executionEnvironments]]
-root = "packages/lup/src/lup/adapters/claude/assets"
-extraPaths = [
-    ".claude/plugins/lup/hooks/runtime",
-    "packages/lup/src/lup/policy/assets",
-]
-
-[[tool.pyright.executionEnvironments]]
 root = ".claude/plugins/lup/hooks/scripts"
 extraPaths = [".claude/plugins/lup/hooks/runtime"]
 
 [[tool.pyright.executionEnvironments]]
-root = "packages/lup/src/lup/adapters/codex/assets"
-extraPaths = [
-    ".codex/plugins/lup/hooks/runtime",
-    "packages/lup/src/lup/policy/assets",
-]
-
-[[tool.pyright.executionEnvironments]]
 root = ".codex/plugins/lup/hooks/scripts"
 extraPaths = [".codex/plugins/lup/hooks/runtime"]
-
 [tool.ruff]
 # Pinned below requires-python (>=3.14) so ruff keeps `except (A, B):`
 # parenthesized. Inferring py314 would treat the parens as redundant and

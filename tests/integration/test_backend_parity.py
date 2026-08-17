@@ -18,8 +18,8 @@ import uuid
 
 import pytest
 
-from lup_template.agent.config import settings
-from lup_template.agent.core import run_agent
+from forumboard.agent.config import settings
+from forumboard.agent.core import run_agent
 
 pytestmark = pytest.mark.integration
 

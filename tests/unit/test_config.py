@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from lup_template.agent.config import Settings, engine_for_model
+from forumboard.agent.config import Settings, engine_for_model
 
 
 class EnvOnlySettings(Settings, env_file=None, extra="ignore"):

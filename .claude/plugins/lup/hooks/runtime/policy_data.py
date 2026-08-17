@@ -98,6 +98,24 @@ ALLOWED_FETCH_SCOPES: list[UrlScopeRow] = [
     },
     {
         "scheme": "https",
+        "host": "developers.notion.com",
+        "port": None,
+        "path_prefix": "/",
+        "reason": "",
+        "include_subdomains": False,
+        "any_port": False,
+    },
+    {
+        "scheme": "http",
+        "host": "developers.notion.com",
+        "port": None,
+        "path_prefix": "/",
+        "reason": "",
+        "include_subdomains": False,
+        "any_port": False,
+    },
+    {
+        "scheme": "https",
         "host": "learn.chatgpt.com",
         "port": None,
         "path_prefix": "/",
@@ -7082,6 +7100,10 @@ RUNNER_TARGETS: list[RunnerTargetRow] = [
     },
     {
         "name": "lup-devtools",
+        "sandbox": "outside",
+    },
+    {
+        "name": "forumboard",
         "sandbox": "outside",
     },
 ]

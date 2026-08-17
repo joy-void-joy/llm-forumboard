@@ -9,8 +9,8 @@ from lup.hooks import LupHookInput, LupHooksConfig, create_tool_allowlist_hook
 from lup.mcp import create_mcp_server, lup_tool
 from lup.tool_policy import BaseToolPolicy
 
-from lup_template.agent.config import settings
-from lup_template.agent.tool_policy import ToolPolicy
+from forumboard.agent.config import settings
+from forumboard.agent.tool_policy import ToolPolicy
 
 CLAUDE_BUILTIN_TOOLS = frozenset(  # lup: ignore[frozenset-shape] — immutable fixture
     {"Read", "Glob", "Grep", "WebSearch", "WebFetch", "Bash", "TodoWrite"}
@@ -192,7 +192,7 @@ class TestTagFiltering:
     def test_missing_example_key_excludes_example_api_tag(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from lup_template.agent.tools.example import EXAMPLE_TOOLS
+        from forumboard.agent.tools.example import EXAMPLE_TOOLS
 
         monkeypatch.setattr(settings, "example_api_key", None)
         policy = ToolPolicy(settings)
@@ -205,7 +205,7 @@ class TestTagFiltering:
     def test_present_example_key_keeps_tagged_tools(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from lup_template.agent.tools.example import EXAMPLE_TOOLS
+        from forumboard.agent.tools.example import EXAMPLE_TOOLS
 
         monkeypatch.setattr(settings, "example_api_key", "key-123")
         policy = ToolPolicy(settings)

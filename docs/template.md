@@ -1,4 +1,4 @@
-<!-- Generated from lup_template.devtools.harness.content.docs.template by `uv run lup-devtools harness generate all` — edit the source, not this file. See docs/harness.md. -->
+<!-- Generated from forumboard.devtools.harness.content.docs.template by `uv run lup-devtools harness generate all` — edit the source, not this file. See docs/harness.md. -->
 
 # The application template
 
@@ -85,7 +85,6 @@ display around the readers it names.
 - `agent` — Agent introspection and debugging
 - `dashboard` — Host the local setup dashboard
 - `dev` — Worktrees, branches, and pre-flight checks
-- `feedback` — Feedback state, metrics, and commits
 - `harness` — Generate and launch the native harnesses
 - `hooks` — Query the permission policy
 - `py` — Python module introspection

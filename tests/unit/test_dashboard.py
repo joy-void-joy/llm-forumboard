@@ -7,7 +7,7 @@ from httpx import ASGITransport, AsyncClient
 
 from lup.devtools import setup
 from lup.devtools.dashboard.app import DashboardState, create_dashboard
-from lup_template.devtools.setup import INTEGRATIONS
+from forumboard.devtools.setup import INTEGRATIONS
 
 BASE_URL = "http://127.0.0.1:8765"
 

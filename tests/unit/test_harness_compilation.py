@@ -106,33 +106,33 @@ from lup.policy.dispatcher import (
     source_half,
 )
 from lup.types import EnvVars
-from lup_template.agent.toolsets import EXAMPLE_GROUP, NOTES_GROUP, tool_group_names
-from lup_template.devtools.agent.serve import (
+from forumboard.agent.toolsets import EXAMPLE_GROUP, NOTES_GROUP, tool_group_names
+from forumboard.devtools.agent.serve import (
     collect_tools_by_server,
     harness_session_context,
 )
 from lup.devtools.dev.rules import rule_reference_artifact
-from lup_template.devtools.harness.catalog import (
+from forumboard.devtools.harness.catalog import (
     HARNESS_SESSION,
     declared_hook_set,
     portable_harness,
 )
-from lup_template.devtools.harness.content.docs.catalog import DOCUMENTS
-from lup_template.devtools.harness.content.guidance import document as guidance_document
-from lup_template.devtools.harness.content.settings import project_settings
+from forumboard.devtools.harness.content.docs.catalog import DOCUMENTS
+from forumboard.devtools.harness.content.guidance import document as guidance_document
+from forumboard.devtools.harness.content.settings import project_settings
 from lup.devtools.harness import launch
 from lup.devtools.harness.launch import (
     claude_sandbox_arguments,
     codex_sandbox_arguments,
 )
 from lup.policy.kernel.shell import sandbox_excluded
-from lup_template.devtools.harness.content.template_claude import (
+from forumboard.devtools.harness.content.template_claude import (
     DOCUMENT as TEMPLATE_CLAUDE,
 )
-from lup_template.devtools.harness.content.template_codex import (
+from forumboard.devtools.harness.content.template_codex import (
     DOCUMENT as TEMPLATE_CODEX,
 )
-from lup_template.devtools.harness.composition import (
+from forumboard.devtools.harness.composition import (
     claude_target,
     codex_target,
 )
@@ -998,7 +998,7 @@ def test_a_generated_file_that_states_no_provenance_fails_the_check() -> None:
 
 
 def test_a_banner_the_content_does_not_open_with_is_rejected() -> None:
-    banner = GeneratedBanner(source="lup_template.invented", command="uv run invent")
+    banner = GeneratedBanner(source="forumboard.invented", command="uv run invent")
 
     with pytest.raises(ValueError, match="does not open with the banner"):
         Artifact(

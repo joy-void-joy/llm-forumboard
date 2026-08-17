@@ -35,14 +35,14 @@ from lup.types import SubagentSpec
 
 from lup.workspace.paths import project_root
 
-from lup_template.agent.subagents import get_subagent_specs
-from lup_template.agent.toolsets import (
+from forumboard.agent.subagents import get_subagent_specs
+from forumboard.agent.toolsets import (
     EXAMPLE_GROUP,
     NOTES_GROUP,
     build_session_toolset,
     tool_group_names,
 )
-from lup_template.devtools.harness.catalog import HARNESS_SESSION
+from forumboard.devtools.harness.catalog import HARNESS_SESSION
 
 pytestmark = pytest.mark.integration
 SUBPROCESS_TIMEOUT_SECONDS = 20

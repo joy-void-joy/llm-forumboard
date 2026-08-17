@@ -32,7 +32,7 @@ from lup.codescan.boundaries import (
     path_is_sanctioned,
 )
 
-from lup_template.devtools.harness.catalog import (
+from forumboard.devtools.harness.catalog import (
     NATIVE_RUNTIMES,
     application_roots,
     dev_project,

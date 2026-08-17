@@ -19,7 +19,7 @@ from lup.types import (
     LupToolResultBlock,
     LupToolUseBlock,
 )
-from lup_template.devtools.main import app
+from forumboard.devtools.main import app
 from lup.devtools.trace.traces import (
     scan_for_capability_gaps,
     scan_for_errors,

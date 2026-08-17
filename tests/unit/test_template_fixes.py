@@ -8,10 +8,10 @@ from pathlib import Path
 import pytest
 from pydantic import BaseModel
 
-from lup_template.agent import prompts
+from forumboard.agent import prompts
 from lup.reflect import ReviewGate
-from lup_template.agent.config import aux_model, engine_for_settings, settings
-from lup_template.agent.core import reflection_submission_gate
+from forumboard.agent.config import aux_model, engine_for_settings, settings
+from forumboard.agent.core import reflection_submission_gate
 from lup.runtime.contracts import Session, Turn
 from lup.runtime.factory import SessionFactory
 from lup.runtime.models import (
@@ -29,13 +29,13 @@ from lup.runtime.models import (
 from lup.telemetry.trace import TraceLogger
 from lup.types import Usage
 from lup.workspace.notes import NotesConfig
-from lup_template.agent.core import (
+from forumboard.agent.core import (
     decorate_factory,
     normalize_codex_approval,
     provider_factory,
 )
-from lup_template.agent.models import AgentOutput
-from lup_template.agent.tool_policy import ToolPolicy
+from forumboard.agent.models import AgentOutput
+from forumboard.agent.tool_policy import ToolPolicy
 
 
 def test_prompt_renders_with_literal_braces_in_section(

@@ -56,7 +56,7 @@ def test_module_name_uses_the_import_root_src_introduces() -> None:
             Path("src/lup_template/devtools/dev/check.py"),
             scanned_roots(DevProject(package="lup_template")),
         )
-        == "lup_template.devtools.dev.check"
+        == "forumboard.devtools.dev.check"
     )
     assert module_name(Path("packages/lup/src/lup/__init__.py")) == "lup"
 

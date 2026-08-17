@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generator_version": "0.2.0",
-  "source_digest": "a0767805705dc7144b8ed7bb63f903d44a83dcef9f95a00b7fa2fad46ace542f",
+  "source_digest": "da3d00412d80ef30518ba9600922bde776bc0a3879ee336f34fab896a7fb29b1",
   "target_requirements": [
     "codex-cli>=0.144"
   ],
@@ -9,7 +9,7 @@
     {
       "path": ".agents/plugins/marketplace.json",
       "category": "generated",
-      "sha256": "f0ca4c2c59edd6821d3b7decff12b4f20bd3b62d2f3d6d0f5129034ce98eb4f9",
+      "sha256": "a64b0dc629412df56e51db366390a6cd81bca00dbbcafccc1c6e7017316cb30f",
       "semantic_id": "plugin.lup",
       "executable": false
     },
@@ -44,7 +44,7 @@
     {
       "path": ".codex/config.toml",
       "category": "generated",
-      "sha256": "b4eba516c8f27f6efb1f27f87ccc79a14ae467e8ed5ec93310917d7ebde6cc39",
+      "sha256": "3a885b19c1a3e9a9af58dfa96f516df1f70d9508ede0014672bb76d02ca35933",
       "semantic_id": "harness.project-config",
       "executable": false
     },
@@ -58,7 +58,7 @@
     {
       "path": ".codex/plugins/lup/TEMPLATE_AGENTS.md",
       "category": "generated",
-      "sha256": "04c41dcae7e6f64ed4a11f80e666f8b7cf053acdec26b3a1e70596312d41c3f2",
+      "sha256": "e1bfed30497fa550982899ebb3fafde5fedc7700848a0406d6b3a7b5c18bf82b",
       "semantic_id": "harness.template-guidance",
       "executable": false
     },
@@ -163,7 +163,7 @@
     {
       "path": ".codex/plugins/lup/hooks/runtime/policy_data.py",
       "category": "generated",
-      "sha256": "d307f3df83ce44d49afee2cb5729934d726db9ef672f27f72e540dbce62b1adc",
+      "sha256": "e1f325e3fa2d4cd11d6f4ccfbeb9ec4169e9aed7f7a108e9622c50a102751914",
       "semantic_id": "hooks.lup-policy",
       "executable": false
     },
@@ -296,7 +296,7 @@
     {
       "path": ".codex/plugins/lup/skills/install/SKILL.md",
       "category": "generated",
-      "sha256": "f6c367050ed4e028d88803e2531aa52516af1f29c634d5239a57610ae1816d8d",
+      "sha256": "26deab657fcde34ff2f6d8d40a898db14544c028223287424e698738f799c19e",
       "semantic_id": "skill.install",
       "executable": false
     },
@@ -401,14 +401,14 @@
     {
       "path": ".codex/rules/lup.rules",
       "category": "generated",
-      "sha256": "f30098ab8abfad8b890743e57b615311039a1c6b5a5e316ffcb6480ddd14263d",
+      "sha256": "b95e02870d1aee7bbcccdab8a167bdc55f5d1d265b189b70eec4926f3257b2ad",
       "semantic_id": "hooks.lup-policy",
       "executable": false
     },
     {
       "path": "AGENTS.md",
       "category": "generated",
-      "sha256": "1ae2f53bce0fe384468dd36573db6e63071af9523070b7ae849a28c96d87a750",
+      "sha256": "bc07435d548e95704babd5eba469d4437c28a4d896d7ebb061a8d4c8dbc073bf",
       "semantic_id": "harness.guidance",
       "executable": false
     }

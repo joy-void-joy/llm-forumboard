@@ -104,4 +104,5 @@ prefix_rule(pattern = ["git", "worktree", "move"], decision = "allow", justifica
 prefix_rule(pattern = ["git", "worktree", "repair"], decision = "allow", justification = "Allowed by Lup semantic shell policy")
 prefix_rule(pattern = ["git", "write-tree"], decision = "allow", justification = "Allowed by Lup semantic shell policy")
 prefix_rule(pattern = ["lup-devtools", "dev", "conflict"], decision = "allow", justification = "Allowed by Lup semantic shell policy")
+prefix_rule(pattern = ["uv", "run", "forumboard"], decision = "allow", justification = "Allowed by Lup semantic shell policy")
 prefix_rule(pattern = ["uv", "run", "lup-devtools"], decision = "allow", justification = "Allowed by Lup semantic shell policy")

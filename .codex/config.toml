@@ -9,14 +9,6 @@ project_doc_max_bytes = 32768
 [features]
 hooks = true
 
-[mcp_servers.notes]
+[mcp_servers.worldview]
 command = "uv"
-args = ["run", "--directory", ".", "lup-devtools", "agent", "serve-tools", "--server", "notes", "--session", "harness"]
-
-[mcp_servers.sandbox]
-command = "uv"
-args = ["run", "--directory", ".", "lup-devtools", "agent", "serve-tools", "--server", "sandbox", "--session", "harness"]
-
-[mcp_servers.codeintel]
-command = "uv"
-args = ["run", "--directory", ".", "lup-devtools", "agent", "serve-tools", "--server", "codeintel", "--session", "harness"]
+args = ["run", "--directory", ".", "lup-devtools", "agent", "serve-tools", "--server", "worldview", "--session", "harness"]

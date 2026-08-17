@@ -65,7 +65,7 @@ from lup.devtools.harness.resolve import (
 from typer.core import TyperGroup
 from typer.main import get_group
 
-from lup_template.devtools.main import app
+from forumboard.devtools.main import app
 from tests.unit.repos import commit_file, initialized_repo
 
 

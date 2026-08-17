@@ -4,7 +4,7 @@
 """Tests for the package renamer's matchers and leftover reporting.
 
 The import matcher alone once shipped a broken downstream CLI: dotted
-module-path string anchors like ``resources.files("lup_template.devtools")``
+module-path string anchors like ``resources.files("forumboard.devtools")``
 survived the rename and crashed at runtime with ``ModuleNotFoundError``.
 These tests pin the string-anchor pass and the stale-reference report
 that make such misses impossible or at least visible.
@@ -13,7 +13,7 @@ that make such misses impossible or at least visible.
 import re
 from pathlib import Path
 
-from lup_template.devtools.dev.init import (
+from forumboard.devtools.dev.init import (
     PACKAGE_IMPORT_RE,
     PACKAGE_STRING_ANCHOR_RE,
     find_stale_references,
@@ -33,7 +33,7 @@ class TestStringAnchorMatcher:
     def test_renames_resources_files_anchor(self, tmp_path: Path) -> None:
         result = apply_rename(
             tmp_path,
-            'ASSETS = resources.files("lup_template.devtools.dashboard")\n',
+            'ASSETS = resources.files("forumboard.devtools.dashboard")\n',
             PACKAGE_STRING_ANCHOR_RE,
         )
         assert result == 'ASSETS = resources.files("syra.devtools.dashboard")\n'
@@ -41,7 +41,7 @@ class TestStringAnchorMatcher:
     def test_renames_single_quoted_entry_point_string(self, tmp_path: Path) -> None:
         result = apply_rename(
             tmp_path,
-            "ENTRY = 'lup_template.devtools.main:app'\n",
+            "ENTRY = 'forumboard.devtools.main:app'\n",
             PACKAGE_STRING_ANCHOR_RE,
         )
         assert result == "ENTRY = 'syra.devtools.main:app'\n"
@@ -49,7 +49,7 @@ class TestStringAnchorMatcher:
     def test_renames_mock_patch_target(self, tmp_path: Path) -> None:
         result = apply_rename(
             tmp_path,
-            'with mock.patch("lup_template.agent.config.load"):\n    pass\n',
+            'with mock.patch("forumboard.agent.config.load"):\n    pass\n',
             PACKAGE_STRING_ANCHOR_RE,
         )
         assert 'mock.patch("syra.agent.config.load")' in result
@@ -63,7 +63,7 @@ class TestStringAnchorMatcher:
         assert apply_rename(tmp_path, source, PACKAGE_STRING_ANCHOR_RE) == source
 
     def test_leaves_unquoted_prose_alone(self, tmp_path: Path) -> None:
-        source = '"""Doc table: `from lup_template.*` becomes target imports."""\n'
+        source = '"""Doc table: `from forumboard.*` becomes target imports."""\n'
         assert apply_rename(tmp_path, source, PACKAGE_STRING_ANCHOR_RE) == source
 
 
@@ -71,13 +71,13 @@ class TestImportMatcherThroughSharedCore:
     def test_renames_from_import(self, tmp_path: Path) -> None:
         result = apply_rename(
             tmp_path,
-            "from lup_template.agent.config import Settings\n",
+            "from forumboard.agent.config import Settings\n",
             PACKAGE_IMPORT_RE,
         )
         assert result == "from syra.agent.config import Settings\n"
 
     def test_import_pass_ignores_string_anchors(self, tmp_path: Path) -> None:
-        source = 'ASSETS = resources.files("lup_template.devtools.dev")\n'
+        source = 'ASSETS = resources.files("forumboard.devtools.dev")\n'
         assert apply_rename(tmp_path, source, PACKAGE_IMPORT_RE) == source
 
 

@@ -15,7 +15,7 @@ from lup.codescan.portable import native_vocabulary, prose_breaches
 from lup.harness.contracts import NativeSpellings
 from lup.harness.models import PromptDocument, TextPart
 from lup.harness.prompts import SPAWNED_SESSION_LOSES_SHELL
-from lup_template.devtools.harness.catalog import portable_harness
+from forumboard.devtools.harness.catalog import portable_harness
 
 RUNTIMES: list[NativeSpellings] = [ClaudeSpellings(), CodexSpellings()]
 

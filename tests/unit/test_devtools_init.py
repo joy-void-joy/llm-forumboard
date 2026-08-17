@@ -14,7 +14,7 @@ from pathlib import Path
 import tomlkit
 
 from lup.workspace.paths import is_template_scaffold
-from lup_template.devtools.dev.init import clear_scaffold_flag
+from forumboard.devtools.dev.init import clear_scaffold_flag
 
 REPO_PYPROJECT = Path("pyproject.toml")
 

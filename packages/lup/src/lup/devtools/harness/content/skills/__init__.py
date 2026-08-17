@@ -1,1 +1,0 @@
-"""Typed harness content declarations."""

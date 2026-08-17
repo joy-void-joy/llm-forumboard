@@ -48,8 +48,8 @@ from lup.policy.models import (
 from lup.policy.grants import LeaseGrants
 from lup.policy.refused_tools import RefusedTool
 from lup.policy.rules import EditPolicy, FetchPolicy, ShellPolicy, UrlScope
-from lup_template.devtools.harness.catalog import declared_hook_set
-from lup_template.devtools.harness.content.shell_vocabulary import SHELL_RULES
+from forumboard.devtools.harness.catalog import declared_hook_set
+from forumboard.devtools.harness.content.shell_vocabulary import SHELL_RULES
 
 DOCS_ORIGIN = AnyHttpUrl("https://docs.example.com")
 DENIED_URL = AnyHttpUrl("https://docs.example.com/private/token")
