@@ -27,11 +27,11 @@ from pydantic import BaseModel, ValidationError
 
 from lup.devtools.setup import read_env_local, write_env_local
 
-from forumboard.claudeai.browser import context_dir, has_session
+from forumboard.claudeai.browser import context_dir
 from forumboard.claudeai.login import KeyEvent, MouseEvent, StreamingLogin, WheelEvent
 from forumboard.devtools.setup import create_databases, page_id_of
 from forumboard.notion.client import NotionError, NotionWorkspace
-from forumboard.profiles import ProfileState, read_roster
+from forumboard.profiles import profile_states, read_roster
 
 logger = logging.getLogger(__name__)
 
@@ -140,12 +140,6 @@ def create_app(project_root: Path, profiles_root: Path) -> FastAPI:
     app = FastAPI(title="forumboard enrolment", docs_url=None, redoc_url=None)
 
     def listing() -> ProfileListing:
-        roster = read_roster(project_root)
-        if not profiles_root.is_dir():
-            return ProfileListing()
-        names = sorted(
-            entry.name for entry in profiles_root.iterdir() if entry.is_dir()
-        )
         return ProfileListing(
             profiles=[
                 ProfileView(
@@ -154,14 +148,7 @@ def create_app(project_root: Path, profiles_root: Path) -> FastAPI:
                     signed_in=state.signed_in,
                     summary=state.describe(),
                 )
-                for name in names
-                if (
-                    state := ProfileState(
-                        name=name,
-                        enrolled=roster.holds(name),
-                        signed_in=has_session(profiles_root, name),
-                    )
-                )
+                for state in profile_states(project_root, profiles_root)
             ]
         )
 

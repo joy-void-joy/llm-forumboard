@@ -19,6 +19,7 @@ from typing import Annotated
 import typer
 
 import lup.workspace.paths
+import forumboard.profiles
 from forumboard.agent.config import settings
 from forumboard.devtools.setup import app as setup_app
 
@@ -73,8 +74,8 @@ def project_root() -> Path:
 
 
 def profiles_root() -> Path:
-    """Where profile directories live."""
-    return project_root() / ".lup" / "profiles"
+    """Where profile directories live, for this checkout."""
+    return forumboard.profiles.profiles_root(project_root())
 
 
 VerboseOption = Annotated[
@@ -190,24 +191,13 @@ def serve(
 @profile_app.command(name="list")
 def list_profiles() -> None:
     """Show every profile, whether it is enrolled, and whether it is signed in."""
-    from forumboard.claudeai.browser import has_session
-    from forumboard.profiles import ProfileState, read_roster
+    from forumboard.profiles import profile_states
 
-    root = profiles_root()
-    roster = read_roster(project_root())
-    if not root.is_dir():
-        typer.echo(f"No profiles yet — {root} does not exist.")
+    states = profile_states(project_root(), profiles_root())
+    if not states:
+        typer.echo(f"No profiles yet — none under {profiles_root()}.")
         return
-    names = sorted(entry.name for entry in root.iterdir() if entry.is_dir())
-    if not names:
-        typer.echo("No profiles yet.")
-        return
-    for name in names:
-        state = ProfileState(
-            name=name,
-            enrolled=roster.holds(name),
-            signed_in=has_session(root, name),
-        )
+    for state in states:
         typer.echo(state.describe())
 
 

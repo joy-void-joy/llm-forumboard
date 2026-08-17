@@ -20,6 +20,8 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
+from forumboard.claudeai.browser import has_session
+
 logger = logging.getLogger(__name__)
 
 # lup: ignore[constant-declaration] — this repository's own layout
@@ -80,6 +82,16 @@ def roster_path(project_root: Path) -> Path:
     return project_root / "config" / ROSTER_FILENAME
 
 
+def profiles_root(project_root: Path) -> Path:
+    """Where profile directories live — gitignored, one per person.
+
+    A profile holds two credentials that expire independently: the claude.ai
+    browser session under ``claude-web``, and the Claude Code login the agent
+    runs under. Same person, different authorisations.
+    """
+    return project_root / ".lup" / "profiles"
+
+
 def read_roster(project_root: Path) -> Roster:
     """The roster, or an empty one where nobody has been enrolled yet."""
     path = roster_path(project_root)
@@ -114,3 +126,34 @@ class ProfileState(BaseModel, frozen=True):
     def syncable(self) -> bool:
         """Whether a sync pass will read this profile."""
         return self.enrolled and self.signed_in
+
+
+def profile_states(project_root: Path, profiles: Path) -> list[ProfileState]:
+    """Every profile this checkout keeps, in name order.
+
+    The listing the CLI, the enrolment page, and the setup wizard each show,
+    derived once — so a profile cannot read as enrolled on one surface and not
+    on another. Both roots are given rather than derived so a test can point
+    the whole listing at a scratch workspace.
+
+    Names come from the roster *and* from the directories, because the two
+    disagree in both directions and each disagreement is worth seeing. A
+    directory nobody enrolled is an account kept but not read; an enrolment
+    with no directory is somebody who agreed and has not signed in yet, and
+    listing only what is on disk would hide them entirely — which is the one
+    case where a person believes they are being synced and is not.
+    """
+    roster = read_roster(project_root)
+    folders = (
+        [entry.name for entry in profiles.iterdir() if entry.is_dir()]
+        if profiles.is_dir()
+        else []
+    )
+    return [
+        ProfileState(
+            name=name,
+            enrolled=roster.holds(name),
+            signed_in=has_session(profiles, name),
+        )
+        for name in sorted({*folders, *roster.names()})
+    ]
