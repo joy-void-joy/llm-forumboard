@@ -22,6 +22,15 @@ import lup.workspace.paths
 import forumboard.profiles
 from forumboard.agent.config import settings
 from forumboard.devtools.setup import app as setup_app
+from forumboard.enrolment import (
+    ActOutcome,
+    Enrol,
+    ProfileAct,
+    ProfileTarget,
+    SetNote,
+    SignIn,
+    Withdraw,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -201,6 +210,34 @@ def list_profiles() -> None:
         typer.echo(state.describe())
 
 
+def report_act(act: ProfileAct, name: str) -> ActOutcome:
+    """Run one act against a named profile, and print what it said.
+
+    These verbs and the editor perform the same acts, so what each one does and
+    the words it says it in cannot drift apart. Nothing having happened goes to
+    stderr, which is what lets a script tell a no-op from a change without
+    reading the sentence.
+    """
+    target = ProfileTarget(
+        project_root=project_root(), profiles_root=profiles_root(), name=name
+    )
+    outcome = asyncio.run(act.perform(target))
+    typer.echo(outcome.message, err=not outcome.changed)
+    return outcome
+
+
+@profile_app.command()
+def edit() -> None:
+    """Sign in, enrol, withdraw, or edit a note, choosing from the listing.
+
+    The same editor ``forumboard setup profiles`` walks. It exists separately
+    because correcting the roster later should not mean re-entering setup.
+    """
+    from forumboard.devtools.enrolment import edit_roster
+
+    edit_roster(project_root(), profiles_root())
+
+
 @profile_app.command()
 def login(name: str) -> None:
     """Open a browser on this machine to sign a profile into claude.ai.
@@ -208,14 +245,8 @@ def login(name: str) -> None:
     For somebody who is not at this machine, use ``forumboard serve`` instead —
     it streams the same browser to theirs.
     """
-    from forumboard.claudeai.browser import context_dir, login_interactive
-
-    directory = context_dir(profiles_root(), name)
-    if asyncio.run(login_interactive(directory)):
-        typer.echo(f"Signed in — session stored at {directory}")
-        return
-    typer.echo("No session was captured.", err=True)
-    raise typer.Exit(1)
+    if not report_act(SignIn(), name).changed:
+        raise typer.Exit(1)
 
 
 @profile_app.command()
@@ -230,15 +261,20 @@ def enrol(
     A profile directory existing does not mean its conversations are read. This
     is the step that says they are, and it is recorded in a committed file.
     """
-    from forumboard.profiles import read_roster
+    report_act(Enrol(answer=note), name)
 
-    root = project_root()
-    roster = read_roster(root)
-    if roster.holds(name):
-        typer.echo(f"{name} is already enrolled.")
-        return
-    recorded = roster.with_profile(name, note).write(root)
-    typer.echo(f"Enrolled {name} — recorded in {recorded}")
+
+@profile_app.command()
+def note(
+    name: str,
+    text: Annotated[str, typer.Argument(help="Who arranged this, or what was agreed")],
+) -> None:
+    """Change what an enrolment records about how it was arranged.
+
+    The enrolment date stays: writing down more accurately what somebody agreed
+    to is not them agreeing again.
+    """
+    report_act(SetNote(answer=text), name)
 
 
 @profile_app.command()
@@ -249,15 +285,7 @@ def withdraw(name: str) -> None:
     a page down is a decision about material other people may have acted on,
     and is not made as a side effect of ending a sync.
     """
-    from forumboard.profiles import read_roster
-
-    root = project_root()
-    roster = read_roster(root)
-    if not roster.holds(name):
-        typer.echo(f"{name} is not enrolled.")
-        return
-    roster.without_profile(name).write(root)
-    typer.echo(f"Withdrew {name}. Nothing already published was changed.")
+    report_act(Withdraw(), name)
 
 
 @profile_app.command()

@@ -120,8 +120,8 @@ def roster_report() -> list[str]:
     if syncable:
         return [f"profiles: reading {', '.join(state.name for state in syncable)}"]
     return [
-        "profiles: NOT reading anybody — run `forumboard setup profiles` to "
-        "sign somebody in and enrol them",
+        "profiles: NOT reading anybody — run `forumboard profile edit` to sign "
+        "somebody in and enrol them",
         *(f"  {state.describe()}" for state in states),
     ]
 

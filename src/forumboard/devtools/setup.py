@@ -23,7 +23,6 @@ Usage::
 import asyncio
 import sys
 from importlib.util import find_spec
-from itertools import count
 from pathlib import Path, PurePosixPath
 from urllib.parse import urlparse
 from uuid import UUID
@@ -46,10 +45,10 @@ from lup.types import EnvVars
 from lup.workspace.paths import project_root
 
 from forumboard.agent.config import settings
-from forumboard.claudeai.browser import context_dir, has_session, login_interactive
+from forumboard.devtools.enrolment import edit_roster
 from forumboard.notion.client import NotionError, NotionWorkspace
 from forumboard.notion.schema import DatabaseShape, DatabaseShapes
-from forumboard.profiles import profile_states, profiles_root, read_roster
+from forumboard.profiles import profile_states, profiles_root
 
 # lup: ignore[constant-declaration] — Notion's own page, where a person has to go
 INTEGRATIONS_URL = "https://www.notion.so/profile/integrations/internal"
@@ -283,50 +282,17 @@ def setup_timezone() -> EnvVars:
     return {"AGENT_TIMEZONE": entered} if entered else no_changes()
 
 
-def sign_in(name: str, profiles: Path) -> bool:
-    """Make sure ``name`` has a claude.ai session, offering to open one here.
-
-    Declining is not a failure. Somebody who is not at this machine signs in
-    through ``forumboard serve``, which streams the same browser to theirs, and
-    the roster entry is worth recording either way — the sync reports an
-    unsigned profile plainly rather than skipping it silently.
-    """
-    if has_session(profiles, name):
-        console.print(f"  [green]{name} is already signed in.[/]")
-        return True
-    console.print(
-        f"  [dim]{name} has no claude.ai session yet. A browser opens here for\n"
-        "  them to sign in; for somebody at another machine, `forumboard serve`\n"
-        "  streams the same window to theirs instead.[/]"
-    )
-    if not typer.confirm("  Open a browser now?", default=True):
-        return True
-    directory = context_dir(profiles, name)
-    if asyncio.run(login_interactive(directory)):
-        console.print(f"  [green]Signed in[/] — session stored at {directory}")
-        return True
-    console.print("  [yellow]No session was captured.[/]")
-    return typer.confirm("  Enrol anyway?", default=False)
-
-
-def enrol_profile(name: str, note: str) -> None:
-    """Record that ``name`` agreed to be read, where a diff will show it."""
-    root = project_root()
-    roster = read_roster(root)
-    if roster.holds(name):
-        console.print(f"  [dim]{name} is already enrolled.[/]")
-        return
-    recorded = roster.with_profile(name, note).write(root)
-    console.print(f"  [green]Enrolled[/] {name} — recorded in {recorded}")
-
-
 def setup_profiles() -> EnvVars:
     """Sign somebody into claude.ai, and record that they agreed to be read.
 
     Two facts, deliberately separate: a stored browser session says an account
-    *can* be read, and a roster entry says it *should* be. This walks both, in
-    that order, because enrolling somebody who cannot be fetched publishes
-    nothing — and a session alone must never be read as consent.
+    *can* be read, and a roster entry says it *should* be. Both are reachable
+    here, along with reversing either, because the state somebody arrives in is
+    rarely the one a walkthrough assumes — an account kept here that nobody
+    enrolled, an enrolment whose session has expired, a note that turned out to
+    be wrong. So this step is the roster editor rather than a walkthrough, and
+    :mod:`forumboard.devtools.enrolment` draws it for every surface that offers
+    the same acts.
 
     It writes no environment. Enrolment belongs in ``config/roster.json``,
     which is committed, because who is being read is exactly what should be
@@ -334,29 +300,7 @@ def setup_profiles() -> EnvVars:
     """
     console.rule("[bold]Profiles[/]")
     root = project_root()
-    profiles = profiles_root(root)
-    states = profile_states(root, profiles)
-    for state in states:
-        console.print(f"    [dim]{state.describe()}[/]")
-    syncable = [state.name for state in states if state.syncable()]
-    console.print(
-        f"  A sync pass reads {', '.join(syncable)}."
-        if syncable
-        else "  A sync pass reads nobody yet."
-    )
-
-    for index in count():
-        first = index == 0
-        question = "  Enrol somebody now?" if first else "  Enrol somebody else?"
-        if not typer.confirm(question, default=first and not syncable):
-            return no_changes()
-        name = typer.prompt("  Profile name").strip()
-        if not name:
-            console.print("  [yellow]Skipped.[/]")
-            return no_changes()
-        if sign_in(name, profiles):
-            note = typer.prompt("  Who arranged this, or what was agreed", default="")
-            enrol_profile(name, note.strip())
+    edit_roster(root, profiles_root(root))
     return no_changes()
 
 
