@@ -30,19 +30,26 @@ from lup.devtools.setup import read_env_local, write_env_local
 from forumboard.claudeai.browser import context_dir
 from forumboard.claudeai.login import KeyEvent, MouseEvent, StreamingLogin, WheelEvent
 from forumboard.devtools.setup import create_databases, page_id_of
+from forumboard.enrolment import ProfileAct, ProfileActs, ProfileTarget
 from forumboard.notion.client import NotionError, NotionWorkspace
-from forumboard.profiles import profile_states, read_roster
+from forumboard.profiles import profile_states
 
 logger = logging.getLogger(__name__)
 
 
 class ProfileView(BaseModel, frozen=True):
-    """One profile as the page shows it."""
+    """One profile as the page shows it.
+
+    The acts travel with the row rather than being decided in the page's
+    script, so a button exists here exactly when the terminal offers the same
+    verb — and one that a profile's state does not allow is drawn nowhere.
+    """
 
     name: str
     enrolled: bool
     signed_in: bool
     summary: str
+    acts: list[ProfileAct] = []
 
 
 class ProfileListing(BaseModel, frozen=True):
@@ -51,10 +58,22 @@ class ProfileListing(BaseModel, frozen=True):
     profiles: list[ProfileView] = []
 
 
-class EnrolRequest(BaseModel):
-    """Anything somebody wants recorded alongside their agreement."""
+class ActRequest(BaseModel):
+    """Which act somebody clicked, and the one value it asked them for."""
 
-    note: str = ""
+    slug: str = ""
+    answer: str = ""
+
+
+class ActReply(BaseModel, frozen=True):
+    """What an act did, and the listing as it stands afterwards.
+
+    Both together so the page never renders from what it assumed happened: the
+    reply it draws is a fresh reading of the roster, in one round trip.
+    """
+
+    message: str = ""
+    listing: ProfileListing = ProfileListing()
 
 
 class SetupState(BaseModel, frozen=True):
@@ -138,6 +157,12 @@ async def pull_input(socket: WebSocket, session: StreamingLogin) -> None:
 def create_app(project_root: Path, profiles_root: Path) -> FastAPI:
     """Build the enrolment app for one checkout."""
     app = FastAPI(title="forumboard enrolment", docs_url=None, redoc_url=None)
+    acts = ProfileActs()
+
+    def targeting(name: str) -> ProfileTarget:
+        return ProfileTarget(
+            project_root=project_root, profiles_root=profiles_root, name=name
+        )
 
     def listing() -> ProfileListing:
         return ProfileListing(
@@ -147,6 +172,7 @@ def create_app(project_root: Path, profiles_root: Path) -> FastAPI:
                     enrolled=state.enrolled,
                     signed_in=state.signed_in,
                     summary=state.describe(),
+                    acts=acts.offered(state),
                 )
                 for state in profile_states(project_root, profiles_root)
             ]
@@ -206,19 +232,31 @@ def create_app(project_root: Path, profiles_root: Path) -> FastAPI:
     async def profiles() -> ProfileListing:
         return listing()
 
-    @app.post("/api/profiles/{name}/enrol")
-    async def enrol(name: str, request: EnrolRequest) -> ProfileListing:
-        roster = read_roster(project_root)
-        roster.with_profile(name, request.note).write(project_root)
-        logger.info("Enrolled %s", name)
-        return listing()
+    @app.post("/api/profiles/{name}/act")
+    async def act(name: str, request: ActRequest) -> ActReply:
+        """Run one of the acts this profile's state offers.
 
-    @app.post("/api/profiles/{name}/withdraw")
-    async def withdraw(name: str) -> ProfileListing:
-        roster = read_roster(project_root)
-        roster.without_profile(name).write(project_root)
-        logger.info("Withdrew %s", name)
-        return listing()
+        Whether the act is offered is decided here rather than taken from what
+        the page posted. The page draws only what a row allows, but a request is
+        whatever arrived on the socket, and a destructive verb that the browser
+        was never shown must not be reachable by asking for it directly.
+
+        A name nobody has heard of is enrolled the same way as a listed one:
+        typing somebody in is how a person with no directory yet becomes a row,
+        and the act's own state check is what decides whether that is allowed.
+        """
+        target = targeting(name)
+        chosen = acts.named(request.slug)
+        if chosen is None or not chosen.applies(target.state()):
+            logger.info("Refused %r on %s", request.slug, name)
+            return ActReply(
+                message=f"{name} cannot do that as things stand.", listing=listing()
+            )
+        outcome = await chosen.model_copy(update={"answer": request.answer}).perform(
+            target
+        )
+        logger.info("%s on %s: %s", chosen.slug, name, outcome.message)
+        return ActReply(message=outcome.message, listing=listing())
 
     @app.websocket("/ws/login/{name}")
     async def login_socket(socket: WebSocket, name: str) -> None:
@@ -304,9 +342,17 @@ ENROLMENT_PAGE = """<!doctype html>
   <p class="lede">
     Sign in to claude.ai so your conversations can be reviewed, and say whether
     you agree to be synced. Enrolling is what starts the sync — signing in alone
-    does not.
+    does not. Each row offers only what that person's state allows; hover a
+    button to read what it costs.
   </p>
   <ul id="profiles"></ul>
+  <div class="step">
+    <p>Somebody not listed yet — enrol them, then sign them in:</p>
+    <input id="new-name" type="text" placeholder="Profile name" size="16">
+    <input id="new-note" type="text" size="34"
+           placeholder="Who arranged this, or what was agreed">
+    <button id="add">Enrol</button>
+  </div>
 </section>
 
 <canvas id="screen" width="1280" height="800" tabindex="0"></canvas>
@@ -317,9 +363,34 @@ const screen = document.getElementById('screen');
 const statusEl = document.getElementById('status');
 const ctx = screen.getContext('2d');
 
-async function refresh() {
-  const res = await fetch('/api/profiles');
-  const data = await res.json();
+// Signing in is the one act this page performs differently: the terminal opens
+// a browser where it runs, and here the same window is streamed over a socket
+// to whoever is reading. Same act, two mechanisms — so the button comes from
+// the row like every other, and only where it goes differs.
+async function run(name, slug, answer) {
+  const reply = await post(`/api/profiles/${encodeURIComponent(name)}/act`,
+                           {slug, answer});
+  statusEl.textContent = reply.message;
+  render(reply.listing);
+}
+
+function ask(row, name, act) {
+  if (!act.asks) return run(name, act.slug, '');
+  const box = document.createElement('span');
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.placeholder = act.asks;
+  input.size = act.destructive ? 16 : 30;
+  const go = document.createElement('button');
+  go.textContent = act.destructive ? 'Confirm' : 'Save';
+  go.onclick = () => run(name, act.slug, input.value);
+  input.onkeydown = (e) => { if (e.key === 'Enter') go.click(); };
+  box.append(input, go);
+  row.append(box);
+  input.focus();
+}
+
+function render(data) {
   listEl.innerHTML = '';
   for (const p of data.profiles) {
     const li = document.createElement('li');
@@ -330,25 +401,30 @@ async function refresh() {
     state.className = 'state';
     state.textContent = p.summary;
     li.append(name, state);
-    const signIn = document.createElement('button');
-    signIn.textContent = p.signed_in ? 'Sign in again' : 'Sign in';
-    signIn.onclick = () => startLogin(p.name);
-    li.append(signIn);
-    const toggle = document.createElement('button');
-    toggle.textContent = p.enrolled ? 'Withdraw' : 'Enrol';
-    toggle.onclick = async () => {
-      const path = p.enrolled ? 'withdraw' : 'enrol';
-      await fetch(`/api/profiles/${p.name}/${path}`, {
-        method: 'POST',
-        headers: {'content-type': 'application/json'},
-        body: JSON.stringify({note: ''}),
-      });
-      refresh();
-    };
-    li.append(toggle);
+    for (const act of p.acts) {
+      const button = document.createElement('button');
+      button.textContent = act.label;
+      button.title = act.consequence;
+      button.onclick = () =>
+        act.slug === 'sign-in' ? startLogin(p.name) : ask(li, p.name, act);
+      li.append(button);
+    }
     listEl.append(li);
   }
 }
+
+async function refresh() {
+  render(await (await fetch('/api/profiles')).json());
+}
+
+document.getElementById('add').onclick = async () => {
+  const name = document.getElementById('new-name').value.trim();
+  const note = document.getElementById('new-note');
+  if (!name) { statusEl.textContent = 'Type a profile name first.'; return; }
+  await run(name, 'enrol', note.value.trim());
+  document.getElementById('new-name').value = '';
+  note.value = '';
+};
 
 function startLogin(name) {
   statusEl.textContent = 'Starting a browser…';
