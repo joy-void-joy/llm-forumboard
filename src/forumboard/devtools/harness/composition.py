@@ -9,13 +9,14 @@ tree at all.
 from functools import partial
 from pathlib import Path
 
+from lup.adapters.claude.login import CLAUDE_LOGIN
 from lup.devtools.dev.rules import write_rule_reference
 from lup.devtools.dev.workflow import write_workflow
 from lup.devtools.harness.composition import (
     NativeTargets,
     claude_composition,
     codex_composition,
-    local_claude_profile_directory,
+    local_profile_directory,
 )
 from lup.devtools.harness.drift import RepositoryWriter
 from lup.devtools.harness.generate import (
@@ -60,7 +61,7 @@ def profile_directory() -> ProfileDirectory:
     — which is the whole reason to keep the profiles here rather than let
     each entry point fall back to the operator's personal registry.
     """
-    return local_claude_profile_directory(project_root())
+    return local_profile_directory(project_root(), CLAUDE_LOGIN)
 
 
 def claude_target(root: Path) -> NativeHarnessComposition:

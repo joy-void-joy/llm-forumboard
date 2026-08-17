@@ -5,12 +5,8 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 import yaml
 
-from lup.devtools.dev.commit_guard import DRIFT_COMMAND
-from lup.devtools.dev.workflow import (
-    CHECK_COMMAND,
-    WORKFLOW_PATH,
-    write_workflow,
-)
+from lup.devtools.dev.git_guards import CHECK_COMMAND, DRIFT_COMMAND
+from lup.devtools.dev.workflow import WORKFLOW_PATH, write_workflow
 from forumboard.devtools.harness.catalog import WORKFLOW
 from lup.devtools.harness.evidence import (
     EVIDENCE_LEDGER,
