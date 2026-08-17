@@ -113,9 +113,16 @@ A relative path resolves against the checkout being edited, which the same hook 
 the local Lup plugin and the active profile's account (`CLAUDE_CONFIG_DIR`).
 `lup-devtools usage claude` reports usage for the chosen profile, and
 `lup-devtools usage codex` reports the other backend's. This repository keeps
-its accounts as directories under `.lup/profiles/`, curated with either
-`lup-devtools harness profile` or `lup-devtools setup profile` — the same
-roster through both.
+its accounts as directories under `.lup/profiles/`, curated with
+`lup-devtools harness profile`.
+
+That is not what `forumboard setup profiles` configures. A profile directory
+holds two credentials for the same person: `claude-config`, the account the
+agent runs under, and `claude-web`, the claude.ai session whose conversations
+are read. `harness profile` curates the first; enrolment — the roster in
+`config/roster.json`, which decides whose conversations are read at all — is
+the second, and `forumboard profile` or `forumboard setup profiles` is where
+it happens.
 
 Each repo names its plugin **marketplace** after the project — the plugin entry stays `lup`, so `"""
         ),

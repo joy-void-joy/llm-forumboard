@@ -49,27 +49,31 @@ visible in a diff and reviewable by the people it names.
 
 ```bash
 uv sync
-uv run forumboard setup     # the browser, Notion, and the timezone
+uv run forumboard setup     # the browser, Notion, the timezone, and who is read
 uv run forumboard doctor    # says whether all of it took
 ```
 
-`setup` walks three things. The **login browser** is a Chromium download that
+`setup` walks four things. The **login browser** is a Chromium download that
 every claude.ai sign-in runs in — without it no profile can be enrolled at all.
 **Notion** creates the integration and both databases with the schema this
 repository declares, rather than leaving you to assemble columns by hand.
-**Timezone** names the windows briefings are labelled with.
+**Timezone** names the windows briefings are labelled with. **Profiles** signs
+somebody into claude.ai and records their enrolment, which is the step that
+decides whether the pipeline reads anybody at all.
 
 Any of them can be run alone — `uv run forumboard setup browser`,
-`setup notion`, `setup timezone` — and `setup status` shows where each stands.
+`setup notion`, `setup timezone`, `setup profiles` — and `setup status` shows
+where each stands, including how many profiles are both enrolled and signed in.
 
-Then enrol somebody. Either from this machine:
+`setup profiles` walks somebody at this machine through both halves. To do
+them separately, or for somebody who is already signed in:
 
 ```bash
 uv run forumboard profile login <name>   # opens a browser here
 uv run forumboard profile enrol <name>
 ```
 
-…or from theirs:
+…and for somebody at their own machine:
 
 ```bash
 uv run forumboard serve                  # http://127.0.0.1:8781
