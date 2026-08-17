@@ -65,12 +65,23 @@ Any of them can be run alone — `uv run forumboard setup browser`,
 `setup notion`, `setup timezone`, `setup profiles` — and `setup status` shows
 where each stands, including how many profiles are both enrolled and signed in.
 
-`setup profiles` walks somebody at this machine through both halves. To do
-them separately, or for somebody who is already signed in:
+`setup profiles` opens the roster editor: it lists every profile with what is
+true of it, and offers only what that profile's state allows — signing in,
+enrolling, withdrawing, correcting the note, or removing what is stored. The
+same editor without the rest of setup is:
+
+```bash
+uv run forumboard profile edit
+```
+
+Each verb is also a one-shot command, for a script or for somebody who already
+knows the name:
 
 ```bash
 uv run forumboard profile login <name>   # opens a browser here
-uv run forumboard profile enrol <name>
+uv run forumboard profile enrol <name> --note "asked in standup"
+uv run forumboard profile note <name> "what was actually agreed"
+uv run forumboard profile withdraw <name>
 ```
 
 …and for somebody at their own machine:
@@ -80,7 +91,9 @@ uv run forumboard serve                  # http://127.0.0.1:8781
 ```
 
 The served page carries both jobs: configuring Notion, and signing into
-claude.ai over a browser streamed from this machine to theirs. It binds
+claude.ai over a browser streamed from this machine to theirs. Its rows offer
+the same acts the terminal editor does, from the same declaration, so a verb
+cannot exist in one and not the other. It binds
 loopback by default — the socket drives a real browser holding a real session,
 so reaching it from elsewhere is something to arrange deliberately (an SSH
 tunnel, or a reverse proxy that authenticates).
