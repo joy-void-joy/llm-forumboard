@@ -22,9 +22,41 @@ def guidance_parts(selection: RuleSelection) -> list[models.PromptPart]:
     """This repository's guidance, naming only the rules it still enforces."""
     return [
         models.TextPart(
-            text=r"""# Lup repository guidance
+            text=r"""# forumboard repository guidance
 
-Lup is a reusable framework and template for autonomous, tool-using agents. Keep library code provider-neutral and keep provider syntax in generated adapter artifacts.
+forumboard reads the claude.ai conversations of people who have enrolled, decides what may be published, removes what may not, and keeps a browsable picture of what is currently happening. It is built on the `lup` library, which arrives as a pinned dependency rather than as source in this tree.
+
+## What This Repository Is About
+
+Everything here serves one sequence, and the order of its gates is the design:
+
+1. **Sync** — per enrolled profile, read the conversations that changed since that profile's cursor. A profile's session is a stored browser context, so an expired cookie is re-read rather than stalling the sync silently.
+2. **Review** (Opus, no tools) — publish or skip, what must not appear, and a plan. The plan steers the editor and is **never published**.
+3. **Edit** (Opus, no tools) — produce the page, including the keypoints that *are* published. The editor may abort outright and may redact past what the plan asked for; close reading finds what a skim misses, which is why it gets the second look.
+4. **Publish** — one Notion page per conversation, keyed on the conversation id, rewritten in place when the conversation grows.
+5. **Worldview** — an agent reads what is unmerged and rewrites the topic pages it touches, whole.
+6. **Briefings** — periodic recaps, written from what was published.
+
+### Two Invariants
+
+**Redaction removes; it never marks.** A `[REDACTED]` beside a name announces that this person's something was sensitive, and often what kind. The contract is that the text must read as though the removed part was never said. It is declared once, in `agent/prompts.py`, and quoted into every prompt that touches a transcript — never restated in prose that could drift from it.
+
+**The worldview is rewritten, never appended to.** It answers "what is happening now". A page that accumulates becomes a log, and a log cannot answer that. `write_topic` replaces a page; there is deliberately no append.
+
+### Where Things Are
+
+- `agent/` — the models each pass decides in, the prompts, and the composition root over lup's runtime.
+- `claudeai/` — the unofficial conversation API, the per-profile browser session, and the streamed remote login. The whole fragile surface is here so an upstream change has one place to land.
+- `notion/` — the workspace client, the database schema declared once, and the two repositories over it.
+- `pipeline/` — the passes and the loops that drive them.
+- `profiles.py` — the enrolment roster. A profile directory existing is **not** enrolment; `config/roster.json` is, and it is committed so who is being read is visible in a diff.
+
+### Things That Will Catch You Out
+
+- **Notion's API moved.** Since 2025-09-03 a database holds *data sources*, and queries, schemas, and page parents all name the data source rather than the database. Configuration records database ids because that is what a person can copy from a URL; `NotionWorkspace.data_source_of` is the one place they are bridged.
+- **Shrinking a Notion page is opt-in.** `allow_deleting_content` defaults to false, so a rewrite that removes redacted material would silently no-op without it. Every rewrite here sets it.
+- **Page bodies are Markdown.** Notion accepts and returns it directly — there is no block-conversion layer, and adding one would be re-solving a solved problem.
+- **`.get(` trips the edit hook** even on a typed non-mapping receiver. Where the receiver is an SDK client, spell it another way (`client.request("GET", …)`) rather than reaching for a directive the whole-file audit would then call spurious.
 
 """
         ),
@@ -102,7 +134,7 @@ Use existing libraries from PyPI before writing raw HTTP or rebuilding a wheel.
 
 **Error handling.** A `@lup_tool` handler takes a validated model and returns one; raise `ToolError` to send a recoverable failure back as an MCP error, with a message saying what to do about it. The `is_error` envelope and the input-validation reply are the decorator's, not yours to assemble. Elsewhere, agent code raises for unrecoverable errors, wraps transient failures in `with_retry`, and validates inputs early with Pydantic. Never swallow one silently — log it, handle it, or re-raise. A catch-all `except Exception` is fine at a boundary that does one of those, such as a task loop or subagent delegation, which is why no rule refuses it.
 
-**Placement, in this repository.** Reusable utilities belong in `packages/lup/`; what only this application needs belongs in `src/lup_template/`. If logic already exists in `lup`, import it rather than copying it. `docs/library.md` carries the criterion and the target layout.
+**Placement, in this repository.** Everything this project writes belongs in `src/forumboard/`. `lup` is a pinned dependency, not source in this tree, so there is no second package to weigh a utility against: if logic already exists in `lup`, import it rather than copying it, and if something here would genuinely serve another project on lup, that is a pull request to lup rather than a file moved locally. `docs/library.md` carries the criterion.
 
 """
         ),
@@ -119,9 +151,9 @@ When policy says a command genuinely has to run outside the sandbox, put that co
 
 ### lup-devtools
 
-Development tooling is exposed as the `lup-devtools` CLI entry point, composed in `src/lup_template/devtools/main.py` from two halves: the workflow commands in `packages/lup/src/lup/devtools/`, and what only this repository has beside them. **Always use `lup-devtools` instead of ad-hoc commands.** Never use `uv run python -c "..."` or bare `python`/`python3` — these are denied by the Bash permission hook.
+Development tooling is exposed as the `lup-devtools` CLI entry point, composed in `src/forumboard/devtools/main.py` from two halves: the workflow commands the `lup` dependency ships, and what only this repository has beside them. The application's own CLI is `forumboard` (`src/forumboard/environment/cli/`), which also mounts the setup wizard so an operator never needs both. **Always use `lup-devtools` instead of ad-hoc commands.** Never use `uv run python -c "..."` or bare `python`/`python3` — these are denied by the Bash permission hook.
 
-If you find yourself running the same command repeatedly, **add a command** — to `packages/lup/src/lup/devtools/` when another project on lup would want it, to `src/lup_template/devtools/` when only this one would.
+If you find yourself running the same command repeatedly, **add a command** to `src/forumboard/devtools/`. Where another project on lup would want it too, add it here first and offer it upstream separately — this tree cannot edit the library.
 
 `tmp/` is scratch: gitignored, so nothing written there reaches a diff, a reviewer, or the human — which is why it does not execute. Match the rung to the question: to **read** code, `py info`/`py source`/`py search`/`py imports` plus the codeintel tools answer without running anything; to **compute** something, `lup-devtools py eval '<expression>'` auto-imports and evaluates in the sandbox; with no sandbox available, add a devtools command. `docs/contributing.md` carries the rest of the ladder, down to a heredoc behind a `# lup: escalate: <why>` marker. The argument is reviewability, not power — an agent may already edit `devtools/` and run it.
 
@@ -131,7 +163,7 @@ Run `uv run lup-devtools --help` for the command tree; `docs/template.md` lists 
 
 `lup-devtools harness generate all` regenerates and reconciles every native plugin; `harness <runtime>` regenerates one and launches it. `docs/harness.md` carries the rest of the loop, how a launch reaches the plugin on each runtime, and the roster of every skill and agent this plugin ships. Personal cache, trust, and session state are never committed.
 
-Both rosters are rendered from typed declarations: what is about agent work lives in `packages/lup/src/lup/devtools/harness/content/catalog.py`, what is about being a template in `src/lup_template/devtools/harness/content/catalog.py`, which composes both. Change the catalog that owns the subject, then regenerate.
+Both rosters are rendered from typed declarations: what is about agent work the `lup` dependency declares, and what is this repository's lives in `src/forumboard/devtools/harness/content/catalog.py`, which composes both. Change the catalog that owns the subject, then regenerate. The shell vocabulary — including which `uv run` targets are admitted, and that `forumboard` runs outside the sandbox — is `harness/content/shell_vocabulary.py`.
 
 ### Code Intelligence
 
@@ -141,7 +173,7 @@ The `codeintel` tool group answers questions about code by *resolving* it, throu
 
 ## Configuration
 
-`.env` holds template defaults; `.env.local` holds secrets, is gitignored, and overrides them. Configuration is loaded through pydantic-settings in `src/lup_template/agent/config.py`, which is the only module that reads the environment. `docs/template.md` lists the variables.
+`.env` holds defaults; `.env.local` holds secrets, is gitignored, and overrides them. Configuration is loaded through pydantic-settings in `src/forumboard/agent/config.py`, which is the only module that reads the environment — `NOTION_TOKEN`, the two database ids, the loop intervals, the briefing cadences, and the transcript size past which the editor chunks. `forumboard setup notion` writes the Notion half; `forumboard doctor` says whether it took.
 
 ---
 

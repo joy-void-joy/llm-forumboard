@@ -226,7 +226,7 @@ class StreamingLogin:
             self.playwright,
             self.directory,
             headless=self.display is None,
-            viewport=Viewport(),
+            viewport=Viewport().size(),
             env=env,
         )
         self.context.on("page", self.follow)

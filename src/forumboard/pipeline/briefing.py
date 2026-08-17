@@ -112,9 +112,7 @@ class BriefingPass:
             ),
         )
         stamps = [
-            moment
-            for page in pages
-            if (moment := parse_published(page)) is not None
+            moment for page in pages if (moment := parse_published(page)) is not None
         ]
         return max(stamps) if stamps else None
 

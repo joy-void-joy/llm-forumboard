@@ -1,7 +1,7 @@
 """Regression tests for the provider-neutral application template."""
 
 from collections.abc import AsyncGenerator
-from datetime import datetime, timedelta
+from datetime import timedelta
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -9,9 +9,7 @@ import pytest
 from pydantic import BaseModel
 
 from forumboard.agent import prompts
-from lup.reflect import ReviewGate
 from forumboard.agent.config import aux_model, engine_for_settings, settings
-from forumboard.agent.core import reflection_submission_gate
 from lup.runtime.contracts import Session, Turn
 from lup.runtime.factory import SessionFactory
 from lup.runtime.models import (
@@ -34,31 +32,48 @@ from forumboard.agent.core import (
     normalize_codex_approval,
     provider_factory,
 )
-from forumboard.agent.models import AgentOutput
+from forumboard.agent.models import ReviewPlan
 from forumboard.agent.tool_policy import ToolPolicy
 
 
-def test_prompt_renders_with_literal_braces_in_section(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    json_section = '## Output\n```json\n{"probability": 0.5, "factors": []}\n```'
-    monkeypatch.setattr(prompts, "SECTIONS", ["Today is {date}.", json_section])
-
-    rendered = prompts.get_system_prompt()
-
-    assert '{"probability": 0.5, "factors": []}' in rendered
-    assert "{date}" not in rendered
+def transcript_prompts() -> list[str]:
+    """Every prompt whose input is a transcript that may need redacting."""
+    plan = ReviewPlan(title="t", through_line="t")
+    return [prompts.reviewer_prompt(), prompts.editor_prompt(plan)]
 
 
-def test_prompt_substitutes_date_token(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(prompts, "SECTIONS", ["date={date}"])
-    assert "date=2030-01-02" in prompts.get_system_prompt(date=datetime(2030, 1, 2))
+def test_the_redaction_contract_reaches_every_prompt_that_sees_a_transcript() -> None:
+    """The one invariant a drifting copy would silently break.
+
+    A marker left where something was removed is itself a disclosure, so the
+    contract is quoted rather than restated. If a prompt is ever written that
+    reads a transcript without it, this is what says so.
+    """
+    for prompt in transcript_prompts():
+        assert prompts.REDACTION_CONTRACT in prompt
 
 
-def test_output_format_section_derives_from_model() -> None:
-    section = prompts.output_format()
-    for field_name in AgentOutput.model_fields:
-        assert field_name in section
+def test_both_passes_apply_the_same_sensitivity_test() -> None:
+    """The editor may redact past the plan, so it needs the reviewer's test.
+
+    Two different definitions of sensitive would make the editor's extra
+    authority arbitrary rather than a backstop.
+    """
+    for prompt in transcript_prompts():
+        assert prompts.SENSITIVITY_TEST in prompt
+
+
+def test_the_editor_is_told_it_may_refuse() -> None:
+    """Abort authority is only real if the prompt grants it."""
+    plan = ReviewPlan(title="t", through_line="t")
+    assert "You may abort" in prompts.editor_prompt(plan)
+
+
+def test_the_worldview_prompt_forbids_accumulation() -> None:
+    """A worldview that appends becomes a log and stops answering its question."""
+    worldview = prompts.worldview_prompt()
+    assert "REPLACES" in worldview
+    assert "never write" in worldview
 
 
 def test_allowed_tools_are_supplied_by_the_concrete_composition() -> None:
@@ -171,17 +186,6 @@ def test_aux_model_codex_reuses_session_model(
     monkeypatch.setattr(settings, "agent_sdk", "codex")
     monkeypatch.setattr(settings, "model", "gpt-5.5")
     assert aux_model() == "gpt-5.5"
-
-
-@pytest.mark.asyncio
-async def test_reflection_gate_is_the_typed_submission_gate() -> None:
-    review = ReviewGate()
-    gate = reflection_submission_gate(review)
-    output = AgentOutput(summary="complete")
-
-    assert not (await gate(output)).accepted
-    review.mark_reflected()
-    assert (await gate(output)).accepted
 
 
 class StaticTurn[T: BaseModel | None](Turn[T]):

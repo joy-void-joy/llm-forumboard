@@ -145,9 +145,7 @@ class ConversationSync:
             logger.exception("Processing %s failed", content.uuid)
             return SyncOutcome(profile=profile, fetched=1, failed=1)
 
-    async def decide(
-        self, profile: str, content: ConversationContent
-    ) -> SyncOutcome:
+    async def decide(self, profile: str, content: ConversationContent) -> SyncOutcome:
         """Review, edit, and publish one conversation — or stop at either gate."""
         verdict = await passes.review(content.name, content.markdown)
         plan = verdict.plan_for_editor()

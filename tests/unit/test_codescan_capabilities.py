@@ -24,12 +24,12 @@ def test_a_package_under_a_distribution_directory_resolves_to_the_package() -> N
 
 def test_an_application_module_resolves_from_its_own_root() -> None:
     """The library knows only its own root; the application supplies the rest."""
-    application = DevProject(package="lup_template")
+    application = DevProject(package="forumboard")
     assert module_name(
-        Path("src/lup_template/devtools/app.py"), scanned_roots(application)
+        Path("src/forumboard/devtools/app.py"), scanned_roots(application)
     ) == ("forumboard.devtools.app")
-    assert module_name(Path("src/lup_template/devtools/app.py")) == (
-        "src.lup_template.devtools.app"
+    assert module_name(Path("src/forumboard/devtools/app.py")) == (
+        "src.forumboard.devtools.app"
     )
 
 

@@ -6,11 +6,16 @@ import pytest
 from pydantic import BaseModel
 
 from lup.hooks import LupHookInput, LupHooksConfig, create_tool_allowlist_hook
-from lup.mcp import create_mcp_server, lup_tool
+from lup.mcp import LupMcpTool, create_mcp_server, lup_tool
 from lup.tool_policy import BaseToolPolicy
 
 from forumboard.agent.config import settings
 from forumboard.agent.tool_policy import ToolPolicy
+from forumboard.agent.tools.worldview import create_worldview_tools
+from forumboard.notion.client import NotionWorkspace
+from forumboard.notion.discussions import DiscussionsDatabase
+from forumboard.notion.people import PeopleDirectory
+from forumboard.notion.worldview import WorldviewDatabase
 
 CLAUDE_BUILTIN_TOOLS = frozenset(  # lup: ignore[frozenset-shape] — immutable fixture
     {"Read", "Glob", "Grep", "WebSearch", "WebFetch", "Bash", "TodoWrite"}
@@ -28,6 +33,22 @@ class PingOutput(BaseModel):
 @lup_tool("Echo a ping. Test fixture tool.")
 async def ping(params: PingInput) -> PingOutput:
     return PingOutput(text=params.text)
+
+
+def worldview_tool_fixtures() -> list[LupMcpTool]:
+    """The real worldview tools, built against repositories nothing calls.
+
+    Tag filtering reads a tool's declaration, never runs its handler, so the
+    repositories can point at a workspace that does not exist. Building the
+    real tools rather than fakes is what makes the test fail when somebody
+    adds one and forgets to tag it.
+    """
+    workspace = NotionWorkspace("ntn_fixture")
+    return create_worldview_tools(
+        DiscussionsDatabase(workspace, "discussions"),
+        WorldviewDatabase(workspace, "worldview"),
+        PeopleDirectory(),
+    )
 
 
 @lup_tool(
@@ -189,29 +210,41 @@ class TestTagFiltering:
 
         assert policy.filter_tools([ping]) == [ping]
 
-    def test_missing_example_key_excludes_example_api_tag(
+    def test_missing_notion_token_withholds_every_worldview_tool(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from forumboard.agent.tools.example import EXAMPLE_TOOLS
-
-        monkeypatch.setattr(settings, "example_api_key", None)
+        """Without a token, none of them can do anything but fail."""
+        monkeypatch.setattr(settings, "notion_token", None)
         policy = ToolPolicy(settings)
 
-        assert "requires:example-api" in policy.excluded_tags
-        kept_names = [t.name for t in policy.filter_tools(EXAMPLE_TOOLS)]
-        assert "search_example" not in kept_names
-        assert "fetch_example" in kept_names
+        assert "requires:notion" in policy.excluded_tags
+        assert policy.filter_tools(worldview_tool_fixtures()) == []
 
-    def test_present_example_key_keeps_tagged_tools(
+    def test_a_missing_database_withholds_only_what_needs_it(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from forumboard.agent.tools.example import EXAMPLE_TOOLS
+        """A token without a worldview database still reads discussions.
 
-        monkeypatch.setattr(settings, "example_api_key", "key-123")
+        The two requirements are separate so a half-configured workspace loses
+        exactly the tools it cannot serve, rather than all of them.
+        """
+        monkeypatch.setattr(settings, "notion_token", "ntn_test")
+        monkeypatch.setattr(settings, "notion_worldview_database_id", None)
         policy = ToolPolicy(settings)
 
-        assert "requires:example-api" not in policy.excluded_tags
-        assert policy.filter_tools(EXAMPLE_TOOLS) == list(EXAMPLE_TOOLS)
+        kept = [tool.name for tool in policy.filter_tools(worldview_tool_fixtures())]
+        assert "read_discussion" in kept
+        assert "write_topic" not in kept
+
+    def test_a_configured_workspace_keeps_them_all(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(settings, "notion_token", "ntn_test")
+        monkeypatch.setattr(settings, "notion_worldview_database_id", "d" * 32)
+        policy = ToolPolicy(settings)
+
+        tools = worldview_tool_fixtures()
+        assert policy.filter_tools(tools) == tools
 
 
 class TestBaseToolPolicyStandalone:

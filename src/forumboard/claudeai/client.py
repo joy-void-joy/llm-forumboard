@@ -218,7 +218,9 @@ def block_text(block: JsonValue) -> str:
         case "tool_result":
             nested = block.get("content")  # lup: ignore[dict-get] — same open payload
             if isinstance(nested, list):
-                return "\n\n".join(text for item in nested if (text := block_text(item)))
+                return "\n\n".join(
+                    text for item in nested if (text := block_text(item))
+                )
             return nested if isinstance(nested, str) else ""
         case _:
             for field in ("text", "content", "source"):
@@ -263,11 +265,13 @@ def message_markdown(message: JsonValue) -> str:
         return ""
     # lup: ignore[dict-get] — a message payload is open data read off the wire
     content = message.get("content")
-    blocks = list[str]()
-    if isinstance(content, str):
-        blocks = [content]
-    elif isinstance(content, list):
-        blocks = [text for block in content if (text := block_text(block))]
+    match content:
+        case str():
+            blocks = [content]
+        case list():
+            blocks = [text for block in content if (text := block_text(block))]
+        case _:
+            blocks = list[str]()
     return "\n\n".join(blocks + attachment_texts(message))
 
 
@@ -374,7 +378,9 @@ class ClaudeWebClient:
         if response.status_code in (401, 403):
             raise SessionExpired(refusal_detail(response))
         if response.status_code != 200:
-            raise ClaudeWebError(f"could not list organizations ({response.status_code})")
+            raise ClaudeWebError(
+                f"could not list organizations ({response.status_code})"
+            )
         payload = response.json()
         if not isinstance(payload, list):
             raise ClaudeWebError("organizations came back in an unexpected shape")
@@ -425,7 +431,9 @@ class ClaudeWebClient:
                     if response.status_code in (401, 403):
                         raise SessionExpired(refusal_detail(response))
                     if response.status_code != 200:
-                        raise ClaudeWebError(f"claude.ai answered {response.status_code}")
+                        raise ClaudeWebError(
+                            f"claude.ai answered {response.status_code}"
+                        )
                     return response.json()
                 except SessionExpired as expired:
                     refused = expired

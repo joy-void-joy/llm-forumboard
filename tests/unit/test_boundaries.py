@@ -139,13 +139,13 @@ def test_sanctioned_paths() -> None:
     roots = application_roots()
     assert path_is_sanctioned(Path("packages/lup/src/lup/adapters/claude/runtime.py"))
     assert path_is_sanctioned(Path("tests/unit/test_adapter_transforms.py"), roots)
-    assert path_is_sanctioned(Path("src/lup_template/agent/core.py"), roots)
+    assert path_is_sanctioned(Path("src/forumboard/agent/core.py"), roots)
     assert not path_is_sanctioned(Path("packages/lup/src/lup/subagents.py"), roots)
 
 
 def test_an_application_that_says_nothing_sanctions_nothing_of_its_own() -> None:
     """The library guards its own package and can name no adopter's."""
-    assert not path_is_sanctioned(Path("src/lup_template/agent/core.py"))
+    assert not path_is_sanctioned(Path("src/forumboard/agent/core.py"))
     assert path_is_sanctioned(Path("packages/lup/src/lup/adapters/codex/harness.py"))
 
 
@@ -159,7 +159,7 @@ def test_a_generated_tree_is_sanctioned_by_the_runtime_that_spells_it() -> None:
 
 
 def test_portable_content_is_scanned_for_native_spellings() -> None:
-    path = Path("src/lup_template/devtools/harness/content/skills/example.py")
+    path = Path("src/forumboard/devtools/harness/content/skills/example.py")
     text = (
         "from lup.adapters.claude.runtime import ClaudeSessionFactory\n"
         'method = "turn/start"\n'
@@ -258,7 +258,7 @@ def test_a_directive_two_lines_above_a_table_stays_spurious() -> None:
     assert sorted(item.kind for item in findings) == ["missing", "spurious"]
 
 
-SHELL_VOCABULARY = Path("src/lup_template/devtools/harness/content/shell_vocabulary.py")
+SHELL_VOCABULARY = Path("src/forumboard/devtools/harness/content/shell_vocabulary.py")
 """Where this project's shell command tables live, outside the library."""
 
 MOVED_TABLES = ["SHELL_RULES"]
@@ -301,7 +301,7 @@ def test_the_rule_names_every_table_if_the_vocabulary_returns_to_the_library() -
     assert [breach.module for breach in breaches] == MOVED_TABLES
 
 
-APPLICATION = Path("src/lup_template/agent/tools/search.py")
+APPLICATION = Path("src/forumboard/agent/tools/search.py")
 """A path outside the library, where only the constant rule ever judges."""
 
 
@@ -463,5 +463,5 @@ def test_adapter_packages_are_exempt_from_the_placement_rule() -> None:
         Path("packages/lup/src/lup/adapters/codex/harness.py")
     )
     assert not library_placement_path_is_audited(
-        Path("src/lup_template/devtools/harness/catalog.py")
+        Path("src/forumboard/devtools/harness/catalog.py")
     )

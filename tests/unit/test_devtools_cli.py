@@ -74,7 +74,7 @@ READONLY_COMMANDS: list[list[str]] = [
     ["version"],
     ["version", "changelog"],
     ["trace", "list"],
-    ["feedback", "status"],
+    ["setup", "status"],
     ["setup", "status"],
     ["setup", "profile", "list"],
     ["sync", "status"],

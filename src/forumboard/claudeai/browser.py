@@ -54,6 +54,10 @@ class Viewport(BaseModel, frozen=True):
     width: int = 1280
     height: int = 800
 
+    def size(self) -> "ViewportSize":
+        """This window in Playwright's own spelling."""
+        return {"width": self.width, "height": self.height}
+
 
 def context_dir(profiles_root: Path, profile: str) -> Path:
     """Where a profile's claude.ai browser session is stored."""
@@ -85,14 +89,16 @@ async def launch_context(
     directory: Path,
     *,
     headless: bool,
-    viewport: Viewport | None = None,
+    viewport: "ViewportSize | None" = None,
     env: EnvVars | None = None,
 ) -> "BrowserContext":
-    """Open a profile's persistent context, creating it on first use."""
+    """Open a profile's persistent context, creating it on first use.
+
+    Takes Playwright's own viewport spelling rather than this module's
+    ``Viewport``, which knows how to produce it — so the one function that
+    talks to the driver talks only in the driver's vocabulary.
+    """
     directory.mkdir(parents=True, exist_ok=True)
-    size: "ViewportSize | None" = None
-    if viewport is not None:
-        size = {"width": viewport.width, "height": viewport.height}
     # lup: ignore[dict-str-payload] — environment variables, keyed by whatever
     # the virtual display exports; the value union is Playwright's own
     launch_env: dict[str, str | float | bool] | None = None
@@ -102,7 +108,7 @@ async def launch_context(
         str(directory),
         headless=headless,
         args=[AUTOMATION_FLAG],
-        viewport=size,
+        viewport=viewport,
         env=launch_env,
     )
 

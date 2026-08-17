@@ -1,152 +1,86 @@
 # lup: ignore[constant-declaration]
-# The prompts here are each subagent's own standing prose and the roster is
-# which subagents this application declares — both are what this module is for,
-# and a project wanting others writes them here.
+# The prompt here is the subagent's own standing prose and the roster is which
+# subagents this application declares — both are what this module is for, and a
+# project wanting others writes them here.
 """Subagent definitions.
 
-This is a TEMPLATE. Define subagents for specialized tasks in your domain.
+One role, because there is one job worth delegating. The worldview agent has
+to hold every unmerged discussion in mind to decide what the topics *are*, but
+writing any single topic needs only the discussions that touch it. A pass over
+forty topics that drafted each one inline would carry every transcript it ever
+read into every subsequent decision; delegating the drafting keeps the deciding
+context small and lets the drafts happen independently.
 
-Subagents are spawned by the main agent to perform focused work.
-Each subagent has:
-- A specialized prompt (focused on one job)
-- A subset of tools (only what it needs)
-- Its own model (cheaper models for simpler tasks)
+The drafter cannot write to Notion. It reads and returns prose, and the
+worldview agent calls ``write_topic`` with what comes back — so the one place a
+topic page is replaced stays the one place, and a subagent cannot half-apply a
+rewrite it was in the middle of.
 
-Definitions use ``SubagentSpec`` as portable data. The application injects a
-typed factory recipe into :func:`lup.subagents.create_run_subagent_tool`; the
-tool then performs a one-shot query without selecting a provider itself.
-
-A spec without a ``model`` inherits the session's main model on every
-backend; pinning one (as the specs below do) is a deliberate cost/skill
-choice that holds regardless of ``AGENT_SDK``.
-
-Subagents are one of several agent shapes — ``docs/orchestration.md`` is
-the full catalog. Where the siblings live:
-
-- Nested agents: a one-shot :func:`lup.runtime.query.query` inside a
-  tool handler; the reviewer in ``agent/tools/reflect.py`` is the
-  exemplar
-- Background agents: :class:`lup.runtime.background.BackgroundAgent`, with
-  the observer example in ``agent/tools/realtime.py``
-- Persistent agents: ``lup.realtime.scheduler`` and ``lup.realtime.relay``,
-  with example tools in ``agent/tools/realtime.py``
-- Data augmentation: ``agent/tools/example.py`` (domain dispatch,
-  null-filling, extraction)
+Subagents are one of several agent shapes — ``docs/orchestration.md`` is the
+full catalog. The siblings this project uses: the reviewer and the editor are
+one-shot structured queries (``pipeline/passes.py``), and the worldview pass
+itself is an ordinary tool-using session (``pipeline/worldview.py``).
 """
 
 from lup.types import SubagentSpec
 
-# =============================================================================
-# lup: template: tool lists — grant each subagent only the tools its job needs
-# =============================================================================
 
+def drafting_tools() -> list[str]:
+    """The tools a topic drafter may call.
 
-def research_tools() -> list[str]:
-    """Names of the tools a research subagent is allowed to call.
-
-    A function rather than a constant so that a tool which depends on a
-    configured API key can be added conditionally, keeping that choice
-    beside the rest of the selection. Resolved at import here; to vary it
-    per session, call it from :func:`get_subagent_specs` instead.
+    Reading only. A drafter that could write would be a second path to
+    replacing a page, and the value of having one path is that a crash
+    mid-rewrite leaves a page either wholly old or wholly new.
     """
     return [
-        "WebSearch",
-        "WebFetch",
-        "Read",
-        "Glob",
+        "mcp__worldview__read_discussion",
+        "mcp__worldview__list_unmerged_discussions",
+        "mcp__worldview__read_topic",
+        "mcp__worldview__list_people",
     ]
 
 
-def analysis_tools() -> list[str]:
-    """Names of the tools an analysis subagent is allowed to call."""
-    return [
-        "Read",
-        "Glob",
-    ]
+TOPIC_DRAFTER_PROMPT = """\
+You draft one topic page for a current-worldview board. You do not write it —
+you return the text, and the agent that asked for it writes the page.
 
+You are told which topic, and which discussions bear on it. Read the topic's
+current page if it has one, and read the discussions you are pointed at.
 
-# =============================================================================
-# lup: template: subagent definitions — replace researcher/analyzer with your
-# domain's specialists (each spec: prompt, tool subset, pinned model)
-# =============================================================================
+Return the complete page in Markdown, answering three questions:
 
+- **What is happening** — the current state, not how it got there.
+- **What is waiting on us** — decisions unmade, work blocked, questions open.
+- **What each person needs to know** — named, specific, actionable.
 
-RESEARCHER_PROMPT = """\
-You are a research assistant gathering information on a topic.
+Write for somebody who has been away two weeks and wants to know where things
+stand. They do not want a chronology.
 
-## Your Task
-Research the topic/question given to you. Your output should be thorough and factual.
+This text REPLACES the page. Carry forward whatever is still true; drop what
+has stopped mattering. Never write "Update:", never keep an outdated paragraph
+for the record, never write "previously we thought". If something from weeks
+ago still shapes the present, describe the present shape rather than the event.
 
-## Approach
-1. Search for relevant information
-2. Verify facts across multiple sources
-3. Note any uncertainties or contradictions
-4. Organize findings clearly
+You are reading published, redacted discussions. Do not speculate about what
+might have been removed, and do not reach past what you were given.
 
-## Output Format (JSON)
-```json
-{
-  "key_facts": ["Fact 1 with source", "Fact 2 with source"],
-  "uncertainties": ["What we don't know"],
-  "sources": [{"title": "...", "url": "..."}],
-  "summary": "Brief synthesis of findings"
-}
-```
+End with a short line naming anyone who should look at this now, drawn only
+from `list_people`.
 """
 
-researcher = SubagentSpec(
-    name="researcher",
+topic_drafter = SubagentSpec(
+    name="topic-drafter",
     description=(
-        "Research agent for gathering information. Searches multiple sources, "
-        "verifies facts, and returns organized findings."
+        "Drafts one worldview topic page from the discussions that bear on it. "
+        "Reads only; returns the page text for the caller to write."
     ),
-    prompt=RESEARCHER_PROMPT,
-    tools=research_tools(),
+    prompt=TOPIC_DRAFTER_PROMPT,
+    tools=drafting_tools(),
     model="claude-opus-5",
 )
 
 
-ANALYZER_PROMPT = """\
-You are an analysis assistant examining data or content.
-
-## Your Task
-Analyze the given data/content and extract insights.
-
-## Approach
-1. Understand what you're analyzing
-2. Identify patterns and anomalies
-3. Draw conclusions
-4. Note confidence levels
-
-## Output Format (JSON)
-```json
-{
-  "insights": ["Insight 1", "Insight 2"],
-  "patterns": ["Pattern observed"],
-  "anomalies": ["Unusual finding"],
-  "confidence": 0.8,
-  "summary": "Brief analysis summary"
-}
-```
-"""
-
-analyzer = SubagentSpec(
-    name="analyzer",
-    description=(
-        "Analysis agent for examining data and extracting insights. "
-        "Identifies patterns, anomalies, and draws conclusions."
-    ),
-    prompt=ANALYZER_PROMPT,
-    tools=analysis_tools(),
-    model="claude-opus-5",
-)
-
-
-# =============================================================================
-# EXPORTED SUBAGENTS
-# =============================================================================
-
-ALL_SPECS: list[SubagentSpec] = [researcher, analyzer]
+ALL_SPECS: list[SubagentSpec] = [topic_drafter]
 
 
 def get_subagent_specs() -> list[SubagentSpec]:

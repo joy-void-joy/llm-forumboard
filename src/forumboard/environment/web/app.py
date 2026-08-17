@@ -31,7 +31,7 @@ from forumboard.claudeai.browser import context_dir, has_session
 from forumboard.claudeai.login import KeyEvent, MouseEvent, StreamingLogin, WheelEvent
 from forumboard.devtools.setup import create_databases, page_id_of
 from forumboard.notion.client import NotionError, NotionWorkspace
-from forumboard.profiles import ProfileState, read_roster, write_roster
+from forumboard.profiles import ProfileState, read_roster
 
 logger = logging.getLogger(__name__)
 
@@ -222,14 +222,14 @@ def create_app(project_root: Path, profiles_root: Path) -> FastAPI:
     @app.post("/api/profiles/{name}/enrol")
     async def enrol(name: str, request: EnrolRequest) -> ProfileListing:
         roster = read_roster(project_root)
-        write_roster(project_root, roster.with_profile(name, request.note))
+        roster.with_profile(name, request.note).write(project_root)
         logger.info("Enrolled %s", name)
         return listing()
 
     @app.post("/api/profiles/{name}/withdraw")
     async def withdraw(name: str) -> ProfileListing:
         roster = read_roster(project_root)
-        write_roster(project_root, roster.without_profile(name))
+        roster.without_profile(name).write(project_root)
         logger.info("Withdrew %s", name)
         return listing()
 

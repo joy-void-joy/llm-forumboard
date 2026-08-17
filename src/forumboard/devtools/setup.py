@@ -88,7 +88,9 @@ def describe_shape(shape: DatabaseShape) -> None:
     """Print what a database is for and every column it was given."""
     console.print(f"    [dim]{shape.purpose}[/]")
     for prop in shape.properties:
-        console.print(f"    [dim]· {prop.name} ({prop.notion_type}) — {prop.purpose}[/]")
+        console.print(
+            f"    [dim]· {prop.name} ({prop.notion_type}) — {prop.purpose}[/]"
+        )
 
 
 async def create_databases(token: str, parent: str) -> EnvVars:

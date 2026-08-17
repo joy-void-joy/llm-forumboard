@@ -40,7 +40,12 @@ INHERITED = [py.SUBAPP, sync.SUBAPP, trace.SUBAPP, USAGE, version.SUBAPP]
 
 APPLICATION_SPECS = [
     SubAppSpec(name="agent", help="Agent introspection and debugging"),
-    SubAppSpec(name="dashboard", help="Host the local setup dashboard"),
+    # lup: defer[lup ships lup.devtools.dashboard assets in its wheel]: remount the
+    # library's setup dashboard. It is dropped rather than broken: lup's
+    # package-data never names that package, so the installed wheel has no
+    # index.html and every request to `/` raises FileNotFoundError (issue #1). This
+    # project serves its own setup and enrolment page at `forumboard serve`, which
+    # covers the one integration it has, so nothing is missing meanwhile.
     SubAppSpec(name="dev", help="Worktrees, branches, and pre-flight checks"),
     SubAppSpec(name="harness", help="Generate and launch the native harnesses"),
     SubAppSpec(name="hooks", help="Query the permission policy"),

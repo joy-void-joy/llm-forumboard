@@ -5,7 +5,6 @@
 # the assertion, observed from outside both decoders.
 """Cross-native semantic decoding and conservative policy parity tests."""
 
-import ast
 import importlib
 import importlib.util
 import json
@@ -1121,15 +1120,6 @@ EDIT_POLICY_CASES = [
         effect="allow",
     ),
 ]
-
-
-def test_policy_bundle_contains_assembly_but_no_decision_implementation() -> None:
-    source = Path("packages/lup/src/lup/policy/bundle.py").read_text(encoding="utf-8")
-    tree = ast.parse(source)
-    functions = [node.name for node in tree.body if isinstance(node, ast.FunctionDef)]
-
-    assert "BUNDLED_POLICY_SOURCE" not in source
-    assert all(not name.startswith("decide_") for name in functions)
 
 
 def test_the_neutral_kernel_never_learns_one_runtime_sandbox_spelling() -> None:
@@ -2903,7 +2893,13 @@ def test_edit_policy_bundle_embeds_canonical_ast_refinement(tmp_path: Path) -> N
 
 
 def test_content_prose_examples_do_not_trip_code_or_marker_gates() -> None:
-    path = Path("packages/lup/src/lup/devtools/harness/content/skills/commit.py")
+    """A module whose prose quotes the marker vocabulary is still editable.
+
+    The guidance declaration is the realistic case: it documents `# lup:`
+    spellings by writing them, and a gate that read those as live markers
+    would make the file that explains them the one file nobody can edit.
+    """
+    path = Path("src/forumboard/devtools/harness/content/guidance.py")
     before = path.read_text(encoding="utf-8")
     after = before + (
         '\nPROSE_GATE_EXAMPLE = """Any and # lup: examples remain prose."""\n'

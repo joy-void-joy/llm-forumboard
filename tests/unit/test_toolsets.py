@@ -1,64 +1,70 @@
-# lup: ignore[set-shape]
-# Test fixtures and assertions construct these shapes deliberately.
-"""The toolsets registry — single source of truth for both backend paths.
+"""The tool registry: what is served, and what is deliberately not.
 
-The registry exists to make tool-group drift between backends impossible.
-These tests are the tripwire: the names served to subprocess backends must
-match the groups the registry actually builds, and the only allowed
-difference between the Claude and Codex notes groups is the deliberate
-run_subagent asymmetry.
+Two things worth holding. The served group names must match what the registry
+builds, because the Codex path selects groups by name and a mismatch serves an
+empty server rather than failing. And the worldview tools must be withheld
+when Notion is unconfigured — a tool that could only fail is worse than an
+absent one, because the agent will try it and then reason about the error.
 """
 
-from pathlib import Path
+import pytest
 
-from lup.sandbox.container import Sandbox
-
+from forumboard.agent.config import settings
+from forumboard.agent.tool_policy import ToolPolicy
 from forumboard.agent.toolsets import (
-    EXAMPLE_GROUP,
-    SessionToolset,
+    WORLDVIEW_GROUP,
     build_session_toolset,
     tool_group_names,
 )
 
 
-def build(
-    base: Path,
-    *,
-    realtime: bool = False,
-    with_sandbox: bool = False,
-) -> SessionToolset:
-    sandbox = None
-    if with_sandbox:
-        sandbox = Sandbox(session_id="toolset-test", shared_dir=base / "shared")
-    return build_session_toolset(
-        session_dir=base / "session",
-        outputs_dir=base / "outputs",
-        sandbox=sandbox,
-        realtime_dir=(base / "realtime") if realtime else None,
-    )
+def test_served_names_match_built_groups() -> None:
+    """A name the CLI can select is a group the registry actually builds."""
+    built = set(build_session_toolset()["groups"])
+    assert set(tool_group_names()) == built
 
 
-def test_served_names_match_built_groups(tmp_path: Path) -> None:
-    for realtime in (False, True):
-        toolset = build(
-            tmp_path / str(realtime),
-            realtime=realtime,
-            with_sandbox=True,
-        )
-        built = set(toolset["groups"]) - {EXAMPLE_GROUP}
-        assert set(tool_group_names(realtime=realtime)) == built
+def test_a_session_without_notion_tools_still_has_the_group() -> None:
+    """An empty group is the honest answer, not a missing key.
+
+    Callers index the group by name; making it absent would turn "Notion is
+    not configured" into a KeyError somewhere unrelated.
+    """
+    toolset = build_session_toolset()
+    assert toolset["groups"][WORLDVIEW_GROUP] == []
 
 
-def test_session_group_requires_realtime_dir(tmp_path: Path) -> None:
-    without = build(tmp_path / "without")
-    with_relay = build(tmp_path / "with", realtime=True)
+def test_notion_tools_are_withheld_without_a_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The policy, not the caller, is what decides a tool is unreachable."""
+    monkeypatch.setattr(settings, "notion_token", None)
+    policy = ToolPolicy(settings)
+    assert "requires:notion" in policy.excluded_tags
 
-    assert "session" not in without["groups"]
-    assert with_relay["groups"]["session"]
+
+def test_notion_tools_are_offered_once_configured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """With both a token and a database, nothing withholds the group."""
+    monkeypatch.setattr(settings, "notion_token", "ntn_test")
+    monkeypatch.setattr(settings, "notion_worldview_database_id", "d" * 32)
+    policy = ToolPolicy(settings)
+    assert "requires:notion" not in policy.excluded_tags
+    assert "requires:worldview-db" not in policy.excluded_tags
 
 
-def test_submit_output_is_owned_by_the_turn_runtime(tmp_path: Path) -> None:
-    toolset = build(tmp_path)
-    note_names = {tool.name for tool in toolset["groups"]["notes"]}
-    assert "submit_output" not in note_names
-    assert not toolset["gate"].reflected
+def test_a_configured_worldview_database_is_its_own_requirement(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A token alone does not make the write tools reachable.
+
+    Withholding them separately is what turns "no database configured" into a
+    tool the agent never sees, rather than a write that fails at the end of a
+    pass it has already paid for.
+    """
+    monkeypatch.setattr(settings, "notion_token", "ntn_test")
+    monkeypatch.setattr(settings, "notion_worldview_database_id", None)
+    policy = ToolPolicy(settings)
+    assert "requires:notion" not in policy.excluded_tags
+    assert "requires:worldview-db" in policy.excluded_tags

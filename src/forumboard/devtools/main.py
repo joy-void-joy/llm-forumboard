@@ -27,13 +27,11 @@ Examples::
     $ uv run lup-devtools usage claude --no-detail
 """
 
-
 import typer
 
 from lup.devtools.subapps import SubApp, compose
 from lup.workspace.paths import find_nearest_pyproject
 from forumboard.devtools.agent import app as agent_app
-from lup.devtools.dashboard.app import create_dashboard_app
 from lup.devtools.dev import conflicts
 from forumboard.devtools.dev.app import app as dev_app
 from lup.devtools.harness.app import create_harness_app
@@ -44,7 +42,6 @@ from forumboard.devtools.harness.composition import (
     TARGETS,
     profile_directory,
 )
-from forumboard.devtools.setup import INTEGRATIONS
 from forumboard.devtools.hooks.app import app as hooks_app
 from lup.devtools.report.app import create_report_app
 from forumboard.devtools.setup import app as setup_app
@@ -55,7 +52,6 @@ from forumboard.devtools.subapps import APPLICATION_SPECS, INHERITED
 # it takes and under what name, decided here because nothing sits above it
 APPLICATION_APPS = {
     "agent": agent_app,
-    "dashboard": create_dashboard_app(INTEGRATIONS),
     "dev": dev_app,
     "harness": create_harness_app(
         TARGETS,

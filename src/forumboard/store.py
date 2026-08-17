@@ -49,7 +49,9 @@ class ConversationRecord(BaseModel, frozen=True):
 
     def describe(self) -> str:
         """One line for the log."""
-        outcome = self.edit.describe() if self.edit is not None else self.review.describe()
+        outcome = (
+            self.edit.describe() if self.edit is not None else self.review.describe()
+        )
         return f"{self.conversation_id[:8]} {self.title[:40]!r}: {outcome}"
 
 
@@ -95,7 +97,9 @@ class ConversationStore:
         """Where a profile's high-water mark is kept."""
         return self.profile_dir(profile) / "cursor.json"
 
-    def save_transcript(self, profile: str, conversation_id: str, markdown: str) -> Path:
+    def save_transcript(
+        self, profile: str, conversation_id: str, markdown: str
+    ) -> Path:
         """Write a raw transcript, replacing any earlier copy.
 
         Replacing rather than appending: a conversation that grew is the same
@@ -117,7 +121,9 @@ class ConversationStore:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(record.model_dump(mode="json"), indent=2) + "\n")
 
-    def read_record(self, profile: str, conversation_id: str) -> ConversationRecord | None:
+    def read_record(
+        self, profile: str, conversation_id: str
+    ) -> ConversationRecord | None:
         """What was decided about a conversation, or None where nothing was."""
         path = self.record_path(profile, conversation_id)
         if not path.is_file():
@@ -125,7 +131,9 @@ class ConversationStore:
         try:
             return ConversationRecord.model_validate_json(path.read_text())
         except ValueError:
-            logger.exception("the record at %s is unreadable; treating it as absent", path)
+            logger.exception(
+                "the record at %s is unreadable; treating it as absent", path
+            )
             return None
 
     def read_cursor(self, profile: str) -> ProfileCursor:

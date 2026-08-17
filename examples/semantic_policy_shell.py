@@ -24,7 +24,7 @@ from lup.hooks import LupHooksConfig
 from lup.policy.enforcement import SemanticToolPolicy, create_policy_hooks
 from lup.policy.rules import ShellPolicy, UrlScope
 from lup.runtime.query import query
-from lup_template.devtools.harness.content.shell_vocabulary import SHELL_RULES
+from forumboard.devtools.harness.content.shell_vocabulary import SHELL_RULES
 
 from examples.common import Summary
 

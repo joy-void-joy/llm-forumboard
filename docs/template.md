@@ -83,7 +83,6 @@ its own account call into the one report shape, and the roster composes the
 display around the readers it names.
 
 - `agent` — Agent introspection and debugging
-- `dashboard` — Host the local setup dashboard
 - `dev` — Worktrees, branches, and pre-flight checks
 - `harness` — Generate and launch the native harnesses
 - `hooks` — Query the permission policy

@@ -67,6 +67,13 @@ class Roster(BaseModel):
         """
         return Roster(entries=[e for e in self.entries if e.profile != profile])
 
+    def write(self, project_root: Path) -> Path:
+        """Record this roster, creating its directory on first enrolment."""
+        path = roster_path(project_root)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(self.model_dump(mode="json"), indent=2) + "\n")
+        return path
+
 
 def roster_path(project_root: Path) -> Path:
     """Where the roster lives — committed, not ignored."""
@@ -83,13 +90,6 @@ def read_roster(project_root: Path) -> Roster:
     except ValueError:
         logger.exception("the roster at %s is unreadable; treating it as empty", path)
         return Roster()
-
-
-def write_roster(project_root: Path, roster: Roster) -> None:
-    """Record the roster, creating its directory on first enrolment."""
-    path = roster_path(project_root)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(roster.model_dump(mode="json"), indent=2) + "\n")
 
 
 class ProfileState(BaseModel, frozen=True):

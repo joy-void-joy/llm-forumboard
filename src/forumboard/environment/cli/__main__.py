@@ -240,15 +240,15 @@ def enrol(
     A profile directory existing does not mean its conversations are read. This
     is the step that says they are, and it is recorded in a committed file.
     """
-    from forumboard.profiles import read_roster, roster_path, write_roster
+    from forumboard.profiles import read_roster
 
     root = project_root()
     roster = read_roster(root)
     if roster.holds(name):
         typer.echo(f"{name} is already enrolled.")
         return
-    write_roster(root, roster.with_profile(name, note))
-    typer.echo(f"Enrolled {name} — recorded in {roster_path(root)}")
+    recorded = roster.with_profile(name, note).write(root)
+    typer.echo(f"Enrolled {name} — recorded in {recorded}")
 
 
 @profile_app.command()
@@ -259,14 +259,14 @@ def withdraw(name: str) -> None:
     a page down is a decision about material other people may have acted on,
     and is not made as a side effect of ending a sync.
     """
-    from forumboard.profiles import read_roster, write_roster
+    from forumboard.profiles import read_roster
 
     root = project_root()
     roster = read_roster(root)
     if not roster.holds(name):
         typer.echo(f"{name} is not enrolled.")
         return
-    write_roster(root, roster.without_profile(name))
+    roster.without_profile(name).write(root)
     typer.echo(f"Withdrew {name}. Nothing already published was changed.")
 
 

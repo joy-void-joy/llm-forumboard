@@ -674,5 +674,3 @@ async def run_agent(
     )
     save_session(projected, session_id=identifier)
     return projected
-
-
