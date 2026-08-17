@@ -36,6 +36,15 @@ class Enrolment(BaseModel, frozen=True):
     note: str = ""
     """Free text — who arranged it, or what they agreed to."""
 
+    def with_note(self, note: str) -> "Enrolment":
+        """This enrolment, saying something else about what was arranged.
+
+        ``enrolled_at`` is deliberately untouched. Writing down more accurately
+        what somebody agreed to is not them agreeing again, and the date is
+        answering "when did they", which a correction does not change.
+        """
+        return self.model_copy(update={"note": note})
+
 
 class Roster(BaseModel):
     """Every enrolled profile. A profile absent from here is never read."""
@@ -58,6 +67,21 @@ class Roster(BaseModel):
             profile=profile, enrolled_at=datetime.now(timezone.utc), note=note
         )
         return Roster(entries=[*self.entries, entry])
+
+    def with_note(self, profile: str, note: str) -> "Roster":
+        """This roster, with ``profile``'s note replaced.
+
+        Unchanged for a profile it does not hold: a note is something an
+        enrolment carries, so there is nowhere to put one for somebody who has
+        not agreed, and quietly enrolling them to have somewhere would make a
+        correction into consent.
+        """
+        return Roster(
+            entries=[
+                entry.with_note(note) if entry.profile == profile else entry
+                for entry in self.entries
+            ]
+        )
 
     def without_profile(self, profile: str) -> "Roster":
         """This roster minus ``profile``.
@@ -92,6 +116,17 @@ def profiles_root(project_root: Path) -> Path:
     return project_root / ".lup" / "profiles"
 
 
+def profile_dir(profiles_root: Path, profile: str) -> Path:
+    """One profile's directory, holding both of its credentials.
+
+    :func:`forumboard.claudeai.browser.context_dir` names the ``claude-web``
+    child of this, and the Claude Code login the agent runs under sits beside
+    it. Anything addressing the person rather than one of their credentials —
+    whether a directory is kept here at all, say — asks for this.
+    """
+    return profiles_root / profile
+
+
 def read_roster(project_root: Path) -> Roster:
     """The roster, or an empty one where nobody has been enrolled yet."""
     path = roster_path(project_root)
@@ -110,6 +145,14 @@ class ProfileState(BaseModel, frozen=True):
     name: str
     enrolled: bool
     signed_in: bool
+    kept: bool = False
+    """Whether a directory is kept here for this name.
+
+    Three facts rather than two, because the pair cannot tell an account kept
+    here but never signed in from an enrolment with nothing on disk at all.
+    Being signed in implies this; what needs it is deciding whether there is
+    anything to delete, and how much of a person's credentials that would be.
+    """
 
     def describe(self) -> str:
         """A line an operator can read at a glance."""
@@ -154,6 +197,7 @@ def profile_states(project_root: Path, profiles: Path) -> list[ProfileState]:
             name=name,
             enrolled=roster.holds(name),
             signed_in=has_session(profiles, name),
+            kept=name in folders,
         )
         for name in sorted({*folders, *roster.names()})
     ]
