@@ -24,18 +24,16 @@ from forumboard.devtools.harness.content.guidance import document as guidance_do
 def declared() -> DevDeclarations:
     """What this repository tells the dev tree, read where a command runs.
 
-    Both test suites are installed separately — the workspace root and the
-    vendored library — so the gate runs pytest once per root rather than
-    reporting a green tree that never exercised half of it.
+    One test root, because lup arrives here as a pinned dependency rather
+    than as a tree beside this one: there is no second suite to run, and a
+    root naming a directory this repository does not have aborts the gate
+    before it reports anything.
     """
     return DevDeclarations(
         project=catalog.dev_project(),
         hooks=catalog.declared_hook_set(),
         plugin=catalog.declared_plugin(),
-        test_roots=[
-            check.TestRoot(name="pytest", directory=Path.cwd()),
-            check.TestRoot(name="pytest (lup)", directory=Path("packages/lup")),
-        ],
+        test_roots=[check.TestRoot(name="pytest", directory=Path.cwd())],
     )
 
 
