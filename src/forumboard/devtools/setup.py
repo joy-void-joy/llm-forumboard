@@ -253,14 +253,16 @@ def setup_browser() -> EnvVars:
 
 
 def install_browser() -> None:
-    """Run Playwright's own installer for Chromium and its system libraries.
+    """Run Playwright's own installer for Chromium.
 
-    ``--with-deps`` because a Chromium that cannot find libnss3 fails at launch
-    with a message about a shared object, which reads like a broken install
-    rather than a missing package.
+    The download only. Playwright's ``--with-deps`` would fetch the system
+    libraries beside it, but it does that by shelling out to ``apt-get``, so it
+    reaches Debian-family systems and fails outright on any other distribution.
+    Those libraries belong to the system package manager, and naming Chromium
+    alone is also what the recovery printed on failure asks for.
     """
     uv = sh.Command("uv")
-    uv("run", "playwright", "install", "--with-deps", "chromium")
+    uv("run", "playwright", "install", "chromium")
 
 
 def browser_status(_env: EnvVars) -> IntegrationStatus:
