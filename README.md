@@ -42,8 +42,8 @@ that. `write_topic` replaces a page; there is deliberately no append.
 
 A profile directory existing under `.lup/profiles` means somebody has a Claude
 account configured here. It does **not** mean their conversations are read.
-That is `config/roster.json`, which is committed — so who is being read is
-visible in a diff and reviewable by the people it names.
+That is `.lup/config/roster.json`, which is gitignored — who is being read is
+not something this repository publishes.
 
 ## Getting started
 

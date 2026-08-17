@@ -107,7 +107,7 @@ def roster_report() -> list[str]:
     """Who a sync pass will actually read.
 
     Reported beside Notion because a deployment can be green everywhere else
-    and still publish nothing: enrolment is a committed file rather than a
+    and still publish nothing: enrolment is a local file rather than a
     setting, so nothing in the environment says whether anybody is in it.
     """
     from lup.workspace.paths import project_root

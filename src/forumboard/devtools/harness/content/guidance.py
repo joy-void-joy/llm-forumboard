@@ -49,7 +49,7 @@ Everything here serves one sequence, and the order of its gates is the design:
 - `claudeai/` — the unofficial conversation API, the per-profile browser session, and the streamed remote login. The whole fragile surface is here so an upstream change has one place to land.
 - `notion/` — the workspace client, the database schema declared once, and the two repositories over it.
 - `pipeline/` — the passes and the loops that drive them.
-- `profiles.py` — the enrolment roster. A profile directory existing is **not** enrolment; `config/roster.json` is, and it is committed so who is being read is visible in a diff.
+- `profiles.py` — the enrolment roster. A profile directory existing is **not** enrolment; `.lup/config/roster.json` is, and it is gitignored so who is being read is never published.
 
 ### Things That Will Catch You Out
 

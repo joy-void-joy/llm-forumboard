@@ -750,8 +750,8 @@ That is not what `forumboard setup profiles` configures. A profile directory
 holds two credentials for the same person: `claude-config`, the account the
 agent runs under, and `claude-web`, the claude.ai session whose conversations
 are read. `harness profile` curates the first; enrolment — the roster in
-`config/roster.json`, which decides whose conversations are read at all — is
-the second, and `forumboard profile` or `forumboard setup profiles` is where
+`.lup/config/roster.json`, which decides whose conversations are read at all —
+is the second, and `forumboard profile` or `forumboard setup profiles` is where
 it happens.
 
 Each repo names its plugin **marketplace** after the project — the plugin entry stays `lup`, so `/lup:*` is identical everywhere. Marketplace names share one global namespace (`~/.claude/plugins/known_marketplaces.json`), so a shared name like `lup`/`local` collides across repos and an install from one shadows the others; `lup-devtools dev plugin name` (run by `/lup:init` and `/lup:install`) wires the per-project name.

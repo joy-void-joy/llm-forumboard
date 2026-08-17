@@ -296,9 +296,8 @@ def setup_profiles() -> EnvVars:
     :mod:`forumboard.devtools.enrolment` draws it for every surface that offers
     the same acts.
 
-    It writes no environment. Enrolment belongs in ``config/roster.json``,
-    which is committed, because who is being read is exactly what should be
-    visible in a diff and reviewable by the people it names.
+    It writes no environment. Enrolment belongs in ``.lup/config/roster.json``,
+    which is gitignored rather than committed.
     """
     console.rule("[bold]Profiles[/]")
     root = project_root()
