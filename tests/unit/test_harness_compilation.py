@@ -73,6 +73,7 @@ from lup.harness.models import (
     SkillPattern,
     SpellingExample,
     TextPart,
+    WatchOutput,
     document_byte_size,
 )
 from lup.harness.contracts import PromptRenderer
@@ -437,8 +438,8 @@ def test_generated_resolver_entries_only_launch_the_shared_python_core() -> None
     assert "uv run lup-devtools harness resolve --adapter codex --detach" in skill
     assert "scheduling" not in skill
     for entry in (command, skill):
-        assert "exactly one `status --watch`" in entry
-        assert "event-driven waiter" in entry
+        assert "exactly one watch over the run" in entry
+        assert "Do not reach for anything that only reports on exit" in entry
         assert "--run-id" in entry and "--answer" in entry
         # The entry named flags the CLI has never had, and the acceptance
         # question it pointed at instead does not exist either. An entry
@@ -446,6 +447,10 @@ def test_generated_resolver_entries_only_launch_the_shared_python_core() -> None
         # the reader spends a turn on `No such option`.
         assert "--accept" not in entry and "--reject" not in entry
         assert "integration-assembly" in entry
+    # Waiting is the one instruction whose mechanism belongs to the runtime
+    # rather than to the run, so each tree names the waiter it actually has.
+    assert "`Monitor`" in command
+    assert "`exec_command`" in skill
 
 
 def test_invocation_renderers_own_complete_spelling_and_escaping() -> None:
@@ -522,6 +527,9 @@ PART_CONTRACT: dict[str, PartExpectation] = {
     ),
     "RelocateSession": PartExpectation(
         part=RelocateSession(path="the path step 1 prints"), diverges=True
+    ),
+    "WatchOutput": PartExpectation(
+        part=WatchOutput(command="lup-devtools harness resolve status"), diverges=True
     ),
     "ResolverEntry": PartExpectation(part=ResolverEntry(), diverges=True),
     "ArgumentsRef": PartExpectation(part=ArgumentsRef(), diverges=True),

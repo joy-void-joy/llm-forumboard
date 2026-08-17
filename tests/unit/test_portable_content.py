@@ -41,6 +41,7 @@ def instruction_text(runtime: NativeSpellings) -> str:
             runtime.runtime_docs(),
             runtime.escape_sandbox(MARK).in_prose(),
             runtime.read_document(MARK).in_prose(),
+            runtime.watch_output(MARK),
         ]
     )
 

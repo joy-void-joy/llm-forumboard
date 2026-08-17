@@ -347,11 +347,13 @@ SHELL_POLICY_CASES = [
     DecisionCase(input="touch tmp/marker", effect="allow"),
     DecisionCase(input="rmdir tmp/run", effect="allow"),
     DecisionCase(input="mv tmp/draft.md src/final.md", effect="ask"),
-    # An empty directory anywhere, unlike the file beside it: `mkdir` cannot
-    # overwrite and leaves nothing to run, so what lands inside is judged on
-    # its own path rather than the directory being refused up front.
+    # An empty directory or an empty file, anywhere: neither `mkdir` nor
+    # `touch` can overwrite, and both leave nothing to run, so whatever lands
+    # inside is judged on its own path by the write and edit gates rather than
+    # the container being refused up front. Asking here buys a prompt and no
+    # decision.
     DecisionCase(input="mkdir src/newpkg", effect="allow"),
-    DecisionCase(input="touch src/newfile.py", effect="ask"),
+    DecisionCase(input="touch src/newfile.py", effect="allow"),
     DecisionCase(input="cp --archive tmp/a tmp/b", effect="ask"),
     # Copying reads its sources and writes only its destination, so landing
     # production in a scratch root destroys nothing; moving out of one does,
@@ -1217,6 +1219,7 @@ def test_assembled_kernel_runs_without_site_packages(tmp_path: Path) -> None:
             human_owned_files=["README.md"],
             autonomous_agent_identities=["resolver-worker"],
             path_roles=FIXTURE_PATH_ROLES,
+            acceptance_guard=None,
             shell_rules=SHELL_RULES,
             refused_tools=FIXTURE_REFUSED_TOOLS,
             recoverable_target_limit=FIXTURE_RECOVERABLE_LIMIT,
