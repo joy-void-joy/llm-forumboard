@@ -4,6 +4,7 @@
 """Generated application-owned policy data."""
 
 from kernel.rows import (
+    AcceptanceGuardRow,
     AntiPatternRow,
     PathRoleRow,
     PathRuleRow,
@@ -1710,6 +1711,8 @@ PATH_ROLES: list[PathRoleRow] = [
     },
 ]
 
+ACCEPTANCE_GUARD: AcceptanceGuardRow | None = None
+
 SHELL_RULES: list[ShellRuleRow] = [
     {
         "command": "ls",
@@ -2762,20 +2765,6 @@ SHELL_RULES: list[ShellRuleRow] = [
         "reason": "copying over files requires approval",
     },
     {
-        "command": "touch",
-        "subcommand": "",
-        "operation": "",
-        "effect": "ask",
-        "effect_source": "command",
-        "ask_flags": [],
-        "allow_flags": [],
-        "read_verbs": [],
-        "value_flags": [],
-        "sandbox": "ambient",
-        "sandbox_source": "root",
-        "reason": "creating files requires approval \u2014 prefer the Write tool",
-    },
-    {
         "command": "chmod",
         "subcommand": "",
         "operation": "",
@@ -3265,6 +3254,20 @@ SHELL_RULES: list[ShellRuleRow] = [
     },
     {
         "command": "mkdir",
+        "subcommand": "",
+        "operation": "",
+        "effect": "allow",
+        "effect_source": "command",
+        "ask_flags": [],
+        "allow_flags": [],
+        "read_verbs": [],
+        "value_flags": [],
+        "sandbox": "ambient",
+        "sandbox_source": "root",
+        "reason": "",
+    },
+    {
+        "command": "touch",
         "subcommand": "",
         "operation": "",
         "effect": "allow",
@@ -7077,30 +7080,42 @@ KNOWN_ALLOWANCES: list[str] = [
 
 MAXIMUM_ADDED_LINES = 3
 
-RECOVERABLE_TARGET_LIMIT = 5
+RECOVERABLE_TARGET_LIMIT = 20
 
 RUNNER_TARGETS: list[RunnerTargetRow] = [
     {
         "name": "pyright",
         "sandbox": "ambient",
+        "effect": "allow",
+        "reason": "",
     },
     {
         "name": "pytest",
         "sandbox": "ambient",
+        "effect": "allow",
+        "reason": "",
     },
     {
         "name": "ruff",
         "sandbox": "ambient",
+        "effect": "allow",
+        "reason": "",
     },
     {
         "name": "lup-devtools",
         "sandbox": "outside",
+        "effect": "allow",
+        "reason": "",
     },
     {
         "name": "forumboard",
         "sandbox": "outside",
+        "effect": "allow",
+        "reason": "",
     },
 ]
+
+RUNNER_TARGET_TABLES: list[ShellRuleRow] = []
 
 SANDBOX_EXCLUDED_COMMANDS: list[str] = [
     "uv run lup-devtools py eval *",

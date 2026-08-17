@@ -84,6 +84,7 @@ display around the readers it names.
 
 - `agent` — Agent introspection and debugging
 - `dev` — Worktrees, branches, and pre-flight checks
+- `feedback` — Feedback state, metrics, and commits
 - `harness` — Generate and launch the native harnesses
 - `hooks` — Query the permission policy
 - `py` — Python module introspection

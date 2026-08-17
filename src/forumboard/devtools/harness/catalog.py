@@ -41,6 +41,7 @@ from lup.policy.kernel.rows import PathRoleRow
 from lup.policy.refused_tools import RefusedTool
 from lup.workspace.paths import project_root, read_project_name
 from forumboard.agent.toolsets import tool_group_names
+from forumboard.devtools.subapps import SELECTION
 from forumboard.devtools.harness.content.catalog import AGENTS, SKILLS
 from forumboard.devtools.harness.content.guidance import document as guidance_document
 from forumboard.devtools.harness.content.shell_vocabulary import (
@@ -221,6 +222,7 @@ def dev_project() -> DevProject:
             PathRoleRow(root=role.root.as_posix(), role=role.role)
             for role in hooks.path_roles
         ],
+        subapps=SELECTION,
     )
 
 

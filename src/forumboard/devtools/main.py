@@ -27,41 +27,74 @@ Examples::
     $ uv run lup-devtools usage claude --no-detail
 """
 
+from pathlib import Path
+
 import typer
 
+from lup.devtools.feedback.models import AgentPrompt
+from lup.devtools.roster import DevtoolsDeclarations
 from lup.devtools.subapps import SubApp, compose
 from lup.workspace.paths import find_nearest_pyproject
 from forumboard.devtools.agent import app as agent_app
 from lup.devtools.dev import conflicts
-from forumboard.devtools.dev.app import app as dev_app
-from lup.devtools.harness.app import create_harness_app
+from forumboard.devtools.dev.app import app as dev_app, declared
 from lup.devtools.harness.resolve import ConfiguredModel
 from forumboard.agent.config import engine_for_model, settings
+from forumboard.agent.prompts import get_system_prompt
 from forumboard.devtools.harness.composition import (
     REPOSITORY_WIDE,
     TARGETS,
     profile_directory,
 )
+from forumboard.devtools.harness.content.guidance import document as guidance_document
 from forumboard.devtools.hooks.app import app as hooks_app
-from lup.devtools.report.app import create_report_app
-from forumboard.devtools.setup import app as setup_app
-from forumboard.devtools.subapps import APPLICATION_SPECS, INHERITED
+from forumboard.devtools.setup import INTEGRATIONS
+from forumboard.devtools.subapps import APPLICATION_SPECS, SELECTION, USAGE_ENTRIES
 
 
-# lup: ignore[constant-declaration] — this CLI's own composition: which sub-apps
-# it takes and under what name, decided here because nothing sits above it
+def agent_prompt() -> AgentPrompt:
+    """This project's system prompt, as the health report weighs it.
+
+    One section, because the worldview pass is the only tool-using session
+    here and what it is told is written as one document rather than composed
+    from parts. The other prompts are per-pass and quoted into each other, so
+    no session ever receives them assembled.
+    """
+    rendered = get_system_prompt()
+    return AgentPrompt(
+        sections=[rendered],
+        rendered=rendered,
+        source=Path("src/forumboard/agent/prompts.py"),
+    )
+
+
+DECLARED = DevtoolsDeclarations(
+    dev=declared,
+    targets=TARGETS,
+    repository_writers=REPOSITORY_WIDE,
+    guidance=guidance_document(declared().hooks.rules),
+    prompt=agent_prompt,
+    relocate_roots=[Path("src"), Path("tests")],
+    integrations=INTEGRATIONS,
+    usage_entries=USAGE_ENTRIES,
+    model=ConfiguredModel(
+        name=settings.model, adapter=engine_for_model(settings.model)
+    ),
+    profiles=profile_directory(),
+)
+"""The facts every sub-app the library ships needs of this repository.
+
+One declaration rather than a call per sub-app: the roster wires each entry
+from these, so a factory that grows an argument grows a field here with a
+default instead of breaking this call site.
+"""
+
+# lup: ignore[constant-declaration] — this CLI's own composition: which Typer app
+# answers to each name only it serves, decided here because nothing sits above it
 APPLICATION_APPS = {
     "agent": agent_app,
     "dev": dev_app,
-    "harness": create_harness_app(
-        TARGETS,
-        REPOSITORY_WIDE,
-        ConfiguredModel(name=settings.model, adapter=engine_for_model(settings.model)),
-        profile_directory(),
-    ),
     "hooks": hooks_app,
-    "report": create_report_app(TARGETS, REPOSITORY_WIDE),
-    "setup": setup_app,
 }
 """Where each application spec meets the Typer app answering to its name.
 
@@ -79,15 +112,12 @@ app = typer.Typer(
 
 compose(
     app,
-    sorted(
+    SELECTION.over(
+        DECLARED.roster(),
         [
-            *INHERITED,
-            *[
-                SubApp(spec=spec, app=APPLICATION_APPS[spec.name])
-                for spec in APPLICATION_SPECS
-            ],
+            SubApp(spec=spec, app=APPLICATION_APPS[spec.name])
+            for spec in APPLICATION_SPECS
         ],
-        key=lambda entry: entry.spec.name,
     ),
 )
 
