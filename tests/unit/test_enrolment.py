@@ -181,17 +181,17 @@ def test_the_editor_acts_on_a_profile_chosen_by_its_number(
     ``1`` selects the only row, ``2`` is Enrol among what a kept-but-unenrolled
     profile is offered, the note is typed, and ``q`` finishes.
     """
-    keep_account(tmp_lup_project, "cesia")
+    keep_account(tmp_lup_project, "ana")
     result = runner.invoke(app, ["profile", "edit"], input="1\n2\nasked them\nq\n")
 
     assert result.exit_code == 0, result.output
     [entry] = read_roster(tmp_lup_project).entries
-    assert (entry.profile, entry.note) == ("cesia", "asked them")
+    assert (entry.profile, entry.note) == ("ana", "asked them")
 
 
 def test_the_editor_offers_nothing_a_state_disallows(tmp_lup_project: Path) -> None:
     """Withdraw is not among a stranger's verbs, so its number cannot reach it."""
-    keep_account(tmp_lup_project, "cesia")
+    keep_account(tmp_lup_project, "ana")
     result = runner.invoke(app, ["profile", "edit"], input="1\nq\n")
 
     assert "Withdraw" not in result.output

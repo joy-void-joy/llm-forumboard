@@ -163,7 +163,7 @@ class Enrol(ProfileAct, frozen=True):
 
     slug: str = "enrol"
     label: str = "Enrol for syncing"
-    consequence: str = "recorded in config/roster.json, which is committed"
+    consequence: str = "recorded in .lup/config/roster.json, which is gitignored"
     asks: str = "Who arranged this, or what was agreed"
 
     def applies(self, state: ProfileState) -> bool:

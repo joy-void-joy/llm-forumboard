@@ -134,7 +134,7 @@ def test_the_wizard_offers_an_enrolment_step() -> None:
 
 
 def test_the_enrolment_step_writes_no_environment() -> None:
-    """Enrolment belongs in the committed roster, not in .env.local."""
+    """Enrolment belongs in the roster file, not in .env.local."""
     [profiles] = [i for i in INTEGRATIONS if i.command == "profiles"]
     assert profiles.env_keys == []
 

@@ -259,7 +259,7 @@ def enrol(
     """Add a profile to the sync roster.
 
     A profile directory existing does not mean its conversations are read. This
-    is the step that says they are, and it is recorded in a committed file.
+    is the step that says they are, and it is recorded in a gitignored file.
     """
     report_act(Enrol(answer=note), name)
 

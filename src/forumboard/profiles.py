@@ -6,11 +6,9 @@ are different facts, and conflating them would make enrolment a side effect of
 setting up an agent account — which is how somebody ends up harvested by
 accident.
 
-So enrolment is its own record, and it is committed rather than ignored: who
-is being read is exactly the kind of thing that should be visible in a diff
-and reviewable by the people it names. The roster carries when and by whose
-account, because "who agreed to this, and when" is the question that gets
-asked later.
+So enrolment is its own record, and it is ignored rather than committed. The
+roster carries when and by whose account, because "who agreed to this, and
+when" is the question that gets asked later.
 """
 
 import json
@@ -102,8 +100,8 @@ class Roster(BaseModel):
 
 
 def roster_path(project_root: Path) -> Path:
-    """Where the roster lives — committed, not ignored."""
-    return project_root / "config" / ROSTER_FILENAME
+    """Where the roster lives — gitignored, beside the profiles it names."""
+    return project_root / ".lup" / "config" / ROSTER_FILENAME
 
 
 def profiles_root(project_root: Path) -> Path:
