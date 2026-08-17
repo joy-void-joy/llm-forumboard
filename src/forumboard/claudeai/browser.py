@@ -76,11 +76,11 @@ def has_session(profiles_root: Path, profile: str) -> bool:
 
 
 def require_playwright() -> None:
-    """Fail with the install instruction rather than an import traceback."""
+    """Fail with the command that fixes it rather than an import traceback."""
     if find_spec("playwright.async_api") is None:
         raise RuntimeError(
             "Playwright is not installed. Run `uv sync`, then "
-            "`uv run playwright install chromium`."
+            "`forumboard setup browser`."
         )
 
 

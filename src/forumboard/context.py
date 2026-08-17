@@ -85,22 +85,41 @@ async def open_context() -> ForumboardContext:
     )
 
 
+def browser_report() -> list[str]:
+    """Whether a login could open a browser, which the sync depends on.
+
+    Reported beside Notion because the two failures look nothing alike and
+    both stop the same pipeline: without the browser no profile can sign in,
+    so every enrolled profile syncs nothing and says only that its session
+    expired.
+    """
+    from forumboard.devtools.setup import browser_installed
+
+    if browser_installed():
+        return ["login browser: Chromium installed"]
+    return [
+        "login browser: NOT installed — run `forumboard setup browser`; "
+        "without it no profile can sign in to claude.ai"
+    ]
+
+
 async def configuration_report() -> list[str]:
-    """Lines describing whether Notion is usable, for a doctor command.
+    """Lines describing whether this deployment can run, for a doctor command.
 
     Reports rather than raises: somebody checking their setup wants every
     problem at once, and the first one is rarely the only one.
     """
+    browser = browser_report()
     if not settings.notion_token:
-        return ["NOTION_TOKEN is not set — run `forumboard setup notion`"]
+        return [*browser, "NOTION_TOKEN is not set — run `forumboard setup notion`"]
     workspace = NotionWorkspace(settings.notion_token)
     shapes = DatabaseShapes()
     try:
         identity = await workspace.whoami()
     except NotionError as error:
-        return [f"the token was rejected: {error}"]
+        return [*browser, f"the token was rejected: {error}"]
 
-    lines = [f"connected as {identity}"]
+    lines = [*browser, f"connected as {identity}"]
     for label, database_id, shape in (
         ("Discussions", settings.notion_discussions_database_id, shapes.discussions),
         ("Worldview", settings.notion_worldview_database_id, shapes.worldview),

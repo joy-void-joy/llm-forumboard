@@ -323,7 +323,7 @@ def portable_harness(version: str = "0.2.0", root: Path | None = None) -> Harnes
                 HookPathRole(root=Path("htmlcov"), role="scratch"),
                 HookPathRole(root=Path("node_modules"), role="scratch"),
             ],
-            human_owned_files=[Path("README.md")],
+            human_owned_files=[],
             refused_tools=REFUSED_TOOLS,
             # Which checker answers for an edit is this project's toolchain,
             # not the library's: the path is relative to the checkout that

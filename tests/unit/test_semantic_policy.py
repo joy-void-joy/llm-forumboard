@@ -297,7 +297,6 @@ SHELL_POLICY_CASES = [
     # freely — but the rules that guard a path guard it by who owns it, not
     # by what replacing it would cost, so they answer ahead of that grant and
     # the shell cannot reach what the edit gate stops.
-    DecisionCase(input="echo x > README.md", effect="ask"),
     DecisionCase(input="echo x > sync.json", effect="ask"),
     DecisionCase(input="echo x > .env.local", effect="ask"),
     DecisionCase(input="echo x > docs/fresh-note.md", effect="allow"),

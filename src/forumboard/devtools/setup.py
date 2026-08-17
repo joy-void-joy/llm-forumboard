@@ -21,11 +21,14 @@ Usage::
 """
 
 import asyncio
-from pathlib import PurePosixPath
+import sys
+from importlib.util import find_spec
+from pathlib import Path, PurePosixPath
 from urllib.parse import urlparse
 from uuid import UUID
 from zoneinfo import ZoneInfoNotFoundError
 
+import sh
 import typer
 from tzlocal import get_localzone_name
 
@@ -40,6 +43,7 @@ from lup.devtools.setup import (
 )
 from lup.types import EnvVars
 
+from forumboard.agent.config import settings
 from forumboard.devtools.harness.composition import profile_directory
 from forumboard.notion.client import NotionError, NotionWorkspace
 from forumboard.notion.schema import DatabaseShape, DatabaseShapes
@@ -183,6 +187,87 @@ def notion_status(env: EnvVars) -> IntegrationStatus:
     return IntegrationStatus(ok=True, detail=mask(token))
 
 
+def browser_registry() -> Path:
+    """Where Playwright keeps the browsers it downloads.
+
+    ``PLAYWRIGHT_BROWSERS_PATH`` overrides it, which is how a deployment puts
+    them somewhere a service account can read. It is read through settings, so
+    this check and the browser it checks for cannot disagree about the place.
+    """
+    if settings.playwright_browsers_path is not None:
+        return settings.playwright_browsers_path
+    match sys.platform:
+        case "darwin":
+            return Path.home() / "Library" / "Caches" / "ms-playwright"
+        case "win32":
+            return Path.home() / "AppData" / "Local" / "ms-playwright"
+        case _:
+            return Path.home() / ".cache" / "ms-playwright"
+
+
+def browser_installed() -> bool:
+    """Whether a Chromium has been downloaded for Playwright to drive.
+
+    Read off the registry directory rather than by asking Playwright: the
+    answer wanted here is for a status line, and starting the Node driver to
+    get it costs a subprocess and leaves asyncio teardown noise on the terminal.
+
+    This says a Chromium is present, not that it is the revision this
+    Playwright wants. That is the right granularity for a status line, and
+    `setup browser` reinstalls either way — the installer is idempotent and
+    quick when the current revision is already there.
+    """
+    if find_spec("playwright.async_api") is None:
+        return False
+    registry = browser_registry()
+    return registry.is_dir() and any(registry.glob("chromium-*"))
+
+
+def setup_browser() -> EnvVars:
+    """Install the browser a claude.ai login runs in.
+
+    This is a download rather than a setting, so it writes no environment at
+    all. It is in the wizard because it is a precondition for reading anybody's
+    conversations, and a missing browser otherwise surfaces at the first login
+    as a Playwright error nobody expected.
+    """
+    console.rule("[bold]Login browser[/]")
+    if browser_installed():
+        console.print("  [green]Chromium is installed.[/]")
+        if not typer.confirm("  Reinstall?", default=False):
+            return no_changes()
+
+    console.print("  Downloading Chromium — this takes a minute the first time.")
+    try:
+        install_browser()
+    except sh.ErrorReturnCode as error:
+        console.print(
+            f"  [red]The download failed.[/] Run it directly to see why:\n"
+            f"    uv run playwright install chromium\n  {error}"
+        )
+        raise typer.Exit(1) from error
+    console.print("  [green]Installed.[/]")
+    return no_changes()
+
+
+def install_browser() -> None:
+    """Run Playwright's own installer for Chromium and its system libraries.
+
+    ``--with-deps`` because a Chromium that cannot find libnss3 fails at launch
+    with a message about a shared object, which reads like a broken install
+    rather than a missing package.
+    """
+    uv = sh.Command("uv")
+    uv("run", "playwright", "install", "--with-deps", "chromium")
+
+
+def browser_status(_env: EnvVars) -> IntegrationStatus:
+    """Whether a login could actually open a browser."""
+    if browser_installed():
+        return IntegrationStatus(ok=True, detail="Chromium installed")
+    return IntegrationStatus(ok=False, detail="not installed — no login can run")
+
+
 def setup_timezone() -> EnvVars:
     """Set the timezone briefing windows are named in."""
     console.rule("[bold]Timezone[/]")
@@ -206,6 +291,14 @@ def timezone_status(env: EnvVars) -> IntegrationStatus:
 # lup: ignore[constant-declaration] — which integrations this application offers
 # to set up, decided here because nothing sits above it to be asked
 INTEGRATIONS: list[Integration] = [
+    Integration(
+        name="Login browser",
+        command="browser",
+        help="Install the Chromium a claude.ai login runs in.",
+        env_keys=[],
+        setup_func=setup_browser,
+        status_func=browser_status,
+    ),
     Integration(
         name="Notion",
         command="notion",

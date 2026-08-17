@@ -1,230 +1,154 @@
-(All code in this repository has been reviewed by humans. This README has been written by a human)
+# forumboard
 
-# Lup
+Reads the claude.ai conversations of people who have enrolled, decides what may
+be published, removes what may not, and keeps a browsable picture of what is
+currently happening.
 
-A meta repository for speed-boosting your Claude Code and Codex development and create self-improving [ClaudeAgentSDK] and [CodexSDK](https://learn.chatgpt.com/docs/codex-sdk) applications
+Built on [lup](https://github.com/joy-void-joy/lup), which arrives as a pinned
+dependency rather than as source in this tree.
 
-<img width="1535" height="863" alt="image" src="https://github.com/user-attachments/assets/d5159e28-1669-433b-8f89-e012c3abfa1c" />
-<img width="1532" height="554" alt="image" src="https://github.com/user-attachments/assets/6f272a6e-71b6-4720-89bf-6b811081343d" />
+## What it does
 
-# Why this repo?
+Six steps, and the order of the gates is the design:
 
-I believe that claude code may be underappreciated right now. Not just the agent, but its [SDK](https://platform.claude.com/docs/en/agent-sdk/overview). The SDK of claude code allows it to:
+1. **Sync** — per enrolled profile, read the conversations that changed since
+   that profile's cursor. A profile's session is a stored browser context, so
+   an expired cookie is re-read rather than stalling the sync silently.
+2. **Review** (Opus, no tools) — publish or skip, what must not appear, and a
+   plan. The plan steers the editor and is **never published**.
+3. **Edit** (Opus, no tools) — produce the page, including the keypoints that
+   *are* published. The editor may abort outright and may redact past what the
+   plan asked for; close reading finds what a skim misses, which is why it
+   gets the second look.
+4. **Publish** — one Notion page per conversation, keyed on the conversation
+   id, rewritten in place when the conversation grows.
+5. **Worldview** — an agent reads what is unmerged and rewrites the topic pages
+   it touches, whole.
+6. **Briefings** — periodic recaps, written from what was published.
 
-- Think through a task by using many tools to fetch information, and decompose it carefully
-- Delegate part of its task to other agents through tool calls that augment or gatekeep the results
-- React in real time through auto-deny hooks and get_current_state tools
+### Two invariants
 
-... all of that through your claude code subscription, without having to pay any extra API cost or setup.
+**Redaction removes; it never marks.** A `[REDACTED]` beside a name announces
+that this person's *something* was sensitive, and often what kind. The contract
+is that the text must read as though the removed part was never said. It is
+declared once, in `agent/prompts.py`, and quoted into every prompt that touches
+a transcript.
 
-The basic pattern is to create a ClaudeAgentSDK client, connect many tools to it (like fetching from APIs, searching the web, executing code, interacting with the world) and let claude code decide when to call them.
+**The worldview is rewritten, never appended to.** It answers "what is
+happening now". A page that accumulates becomes a log, and a log cannot answer
+that. `write_topic` replaces a page; there is deliberately no append.
 
-I've found developing those SDK applications with the help of Claude Code to work very well, as well as using Claude Code to improve the whole development scaffolding, using it to add /-commands that speeds up my development, to document general principles and developing devtools to help me or itself navigate it faster. More importantly, Claude Code can review results from past sessions, and tweak the agent based on it, be it its tools, prompts, or all aspect of the pipeline and workflow.
+### Enrolment is an explicit act
 
-This repository is focused on this sort of agent-improvement and meta-self-improvement. It contains tools for storing the traces of all past agents, versioning the current agent, commands for reviewing them and seeing how to improve based on it, common multi-agents patterns I've found useful, as well as meta-commands to add commands or review your own development with Claude Code.
+A profile directory existing under `.lup/profiles` means somebody has a Claude
+account configured here. It does **not** mean their conversations are read.
+That is `config/roster.json`, which is committed — so who is being read is
+visible in a diff and reviewable by the people it names.
 
-Over writing and reusing this technique over the past month, I have come to find that having a template and plugin as a base can really speed up the development and the coherence of Claude. This repository is a sort of extract of all the common patterns and plugin command and scripts I have found useful.
-
-It is a template to help bootstrap this pattern and create your own ClaudeAgentSDK easily.
-
-# Examples
-
-Some examples of things I'm using this self-scaffolding for (still in early WIP):
-
-- [joy.void.joy-bot]: Not yet opensource. A forecasting agent written for the [FutureEval] tournament. Basically this repo with news-searching and many API-fetching tools, and using the feedback-loop mechanism on newly resolved/retrodicted forecast
-- [harmon]: real-time discord bot focused on presence and reactivity/helpfulness, as well as background tasks. The tools here are things like reply, follow_ups, sleep, and contains a gate that forbids it from replying if it hasn't read the new messages first.
-- [mettle]: A bot whose main tool is writing its own tools
-- [botc]: Having bots compete with one another while playing [Blood on the Clocktower]
-
-But you could use it for so much more. Real-time monitoring, mathematical proofs or formal verification or for [[AIMO3]], anything that can be automated where the kind of resources or tools it needs is easy to explore and refine.
-
-# Getting started
-
-To start using this repo either:
-
-- For a fresh repository: Use the "Use this template" button on github, or clone this repository. In the newly cloned repository, use /lup:init [description of your project] or /lup:brainstorm to first flesh out the broad shape of it
-- For an already existing repository, clone lup inside it, and either use /lup:install to install the bare plugin, or /lup:install --interactive to install the plugin and walk through which pieces of the scaffolding (hooks, commands, devtools, CLAUDE.md sections) to bring over
-
-You will need to install [uv] for python management, and [fzf] and [jq] for fuzzy-file matching. Docker is an additional dependency if you plan to use the sandboxing capabilities (set `AGENT_SANDBOX_ENABLED=false` to run without it).
-
-To run the inner agent once everything is synced:
+## Getting started
 
 ```bash
-uv run lup run "your task here"            # single session
-uv run lup loop "task1" "task2"            # batch with auto-commit
-AGENT_SDK=codex AGENT_MODEL=gpt-5.5 uv run lup run "same task, Codex backend"
+uv sync
+uv run forumboard setup     # the browser, Notion, and the timezone
+uv run forumboard doctor    # says whether all of it took
 ```
 
-The application selects one provider only in its concrete composition root and
-passes a configured `SessionFactory` everywhere else. A turn is started with a
-typed `TurnRequest`; structured output is accepted only through the turn-bound
-`submit_output` tool. Missing or invalid submissions are errors, never empty
-successes. Compatibility endpoints and profiles are immutable adapter config
-transforms rather than alternate runtimes.
+`setup` walks three things. The **login browser** is a Chromium download that
+every claude.ai sign-in runs in — without it no profile can be enrolled at all.
+**Notion** creates the integration and both databases with the schema this
+repository declares, rather than leaving you to assemble columns by hand.
+**Timezone** names the windows briefings are labelled with.
 
-### Runtime capabilities
+Any of them can be run alone — `uv run forumboard setup browser`,
+`setup notion`, `setup timezone` — and `setup status` shows where each stands.
 
-Optional behavior is present in `SessionHandle` and `TurnHandle` or absent as
-`None`; there are no unsupported-operation stubs and completed output is not
-advertised as a live stream. This checked-in evidence targets Claude Agent SDK
-0.2.89 and Codex CLI/app-server 0.144.4; regenerate it with
-`uv run lup-devtools agent capabilities --markdown` when native evidence
-changes.
+Then enrol somebody. Either from this machine:
 
-| Capability | claude-sdk-0.2.89 | codex-app-server-0.144.4 |
-| --- | --- | --- |
-| live_events | ✅ | ✅ |
-| interrupt | ✅ | ✅ |
-| steer | — | ✅ |
-| fork | ✅ | ✅ |
-| resume | ✅ | without a fresh dynamic tool |
-| typed_submission | reconnect per turn | thread-start schema only |
-| background | ✅ | ✅ |
+```bash
+uv run forumboard profile login <name>   # opens a browser here
+uv run forumboard profile enrol <name>
+```
 
-The Codex app server currently accepts dynamic tools only on `thread/start`.
-Lup therefore rejects a typed-schema transition or typed resume before input
-instead of silently using a stale schema or losing conversation identity.
+…or from theirs:
 
-The development harness is generated from one typed catalog. Run
-`uv run lup-devtools harness claude` or `uv run lup-devtools harness codex`;
-the old `lup-devtools claude` launcher was removed. Both generated plugins run
-the same hermetic semantic shell/edit/fetch policy without importing this
-checkout at hook time. See the [documentation index](docs/README.md),
-[architecture](docs/architecture.md),
-[harness authoring](docs/harness.md),
-the [application guide](docs/template.md),
-[runtime examples](examples/README.md),
-[resolver lifecycle](docs/resolver.md),
-the [generated rule reference](docs/rules.md),
-[native capability ledger](docs/native-capabilities.md),
-and [contributing](docs/contributing.md).
-Release history is in [CHANGELOG.md](CHANGELOG.md).
+```bash
+uv run forumboard serve                  # http://127.0.0.1:8781
+```
 
-The intended workflow while using this repository is to:
+The served page carries both jobs: configuring Notion, and signing into
+claude.ai over a browser streamed from this machine to theirs. It binds
+loopback by default — the socket drives a real browser holding a real session,
+so reaching it from elsewhere is something to arrange deliberately (an SSH
+tunnel, or a reverse proxy that authenticates).
 
-- Have it cloned as a bare repo with worktrees as siblings under `tree/`: `git clone --bare <url> myproject.git && cd myproject.git && git worktree add tree/main main`
-- When working on a new feature, branching off with `uv run lup-devtools dev worktree create <branch-name>`
-- Going into this new worktree, and working on it there
-- Then /lup:commit it
-- When it works and you've tested it works well /lup:rebase it
-- Review it in github before merging it
-- Call /lup:close on the merged branch or /lup:clean-gone on any branch (like main) to keep the worktree clean
+## Running it
 
-# Overview
+```bash
+uv run forumboard run              # the daemon: all three loops
+```
 
-This repository contains many elements and code template that are designed to make creating your own scaffolding with ClaudeAgentSDK seamless:
+Every loop has a one-shot twin, which is how anything here gets debugged:
 
-- Code template and utilities to create a ClaudeAgentSDK with appropriate tools and hooks from scratch
-- Many quality of life improvement to the claude code experience through a lup plugin
-- devtools aimed at both human use and agent use
-- Feedback loop and note-taking mechanisms for auditing and improving your agent
+```bash
+uv run forumboard sync-once        # fetch, review, edit, publish
+uv run forumboard worldview-once   # fold unmerged discussions in
+uv run forumboard briefings-once   # write whichever briefings are owed
+uv run forumboard once             # one of each, in order
+```
 
-## Intended workflow
+And to see what was decided:
 
-### Meta development
+```bash
+uv run forumboard profile list
+uv run forumboard profile status <name>
+```
 
-The Claude Code setup itself is treated as part of the product. Whenever a pain point shows up in your workflow, you fix the workflow, not just the instance: /lup:add-command and /lup:modify-command create and evolve slash commands, /lup:hooks edits the permission hook patterns, /lup:meta reviews the whole .claude structure and brainstorms improvements, and /lup:principle propagates a general principle across the entire repo. Downstream projects can pull improvements from this template with /lup:update, and patterns that emerged downstream flow back here with /lup:import.
+## Configuration
 
-### Worktree management
+`.env` holds the defaults and documents every variable; `.env.local` holds
+secrets, is gitignored, and overrides them. `src/forumboard/agent/config.py` is
+the only module that reads the environment.
 
-Development happens in git worktrees — one directory per branch, siblings under `tree/` — so several features can be worked on in parallel without switching files in place. `uv run lup-devtools dev worktree create <name>` creates one (and syncs dependencies and plugins), `lup-devtools dev check` runs the pre-flight (format, lint, pyright, pytest) before a PR, /lup:rebase pushes the branch and opens a PR with a cleaned-up history, /lup:close merges the approved PR, and /lup:clean-gone prunes worktrees whose branches are gone. `uv run lup-devtools dev branches` and `dev survey` show branch containment and PR status at a glance.
+Raw transcripts and sync cursors live under `notes/`, which is gitignored. They
+are unredacted by definition — they are the input to redaction — so they never
+reach a commit.
 
-### Feedback loop
+## Layout
 
-Every agent session writes its traces, outputs, and session JSONs under `notes/traces/<version>/`. This data stays out of git by default (`notes/*` is gitignored); domains that want each run's outputs versioned opt in during /lup:init, which removes the ignore lines and keeps the auto-commit loop. /lup:feedback-loop orchestrates the analysis over them: collect metrics (`lup-devtools feedback collect`), read traces deeply (`lup-devtools trace show`), classify what failed and why, then implement changes — tools first, prompts last. /lup:bump versions the agent (`[tool.lup] agent_version` in pyproject.toml) so results stay comparable across behavior changes.
+| Path | What lives there |
+| --- | --- |
+| `agent/` | The models each pass decides in, the prompts, and the composition root over lup's runtime |
+| `claudeai/` | The unofficial conversation API, the per-profile browser session, and the streamed remote login |
+| `notion/` | The workspace client, the database schema declared once, and the two repositories over it |
+| `pipeline/` | The passes and the loops that drive them |
+| `profiles.py` | The enrolment roster |
 
-# More thorough description
+## Things that will catch you out
 
-## Code template
+- **Notion's API moved.** Since 2025-09-03 a database holds *data sources*, and
+  queries, schemas, and page parents all name the data source rather than the
+  database. Configuration records database ids because that is what a person
+  can copy from a URL; `NotionWorkspace.data_source_of` is the one place they
+  are bridged.
+- **Shrinking a Notion page is opt-in.** `allow_deleting_content` defaults to
+  false, so a rewrite that removes redacted material would silently no-op
+  without it. Every rewrite here sets it.
+- **Page bodies are Markdown.** Notion accepts and returns it directly — there
+  is no block-conversion layer.
 
-### lib
+## Development
 
-`packages/lup` is the standalone library — a uv workspace member that any project can depend on without modification. It contains narrow runtime capabilities and typed handles (`lup.runtime`), concrete Claude/Codex configs and factories (`lup.adapters`), semantic policy and native hook boundaries (`lup.policy`), deterministic harness compilation (`lup.harness`), the persisted DAG resolver (`lup.resolver`), MCP tool creation (`lup.mcp`), workspace/history support, scheduling, telemetry, and the Docker sandbox. It is configured through validated component-owned models and explicit factory composition, never a broad options object or global engine registry.
+```bash
+uv run pyright
+uv run ruff check .
+uv run pytest
+uv run lup-devtools dev check          # the repository's own gates
+```
 
-### agent
+`dev check` covers the code. Whether this deployment can actually *run* — the
+browser, the token, both database schemas — is `forumboard doctor`, because
+those are facts about a machine rather than about the tree.
 
-`src/lup_template/agent` is the part the feedback loop improves: the orchestration (`core.py`), the system prompts (`prompts.py`), the output models (`models.py`), the SDK-agnostic subagent specs (`subagents.py`), the MCP tools (`tools/`), and the tag-based tool policy (`tool_policy.py`) that excludes tools whose API keys are missing. /lup:init renames and customizes this package for your domain.
-
-### Environment
-
-`src/lup_template/environment` is the domain scaffolding around the agent — user interaction, game logic, application flow. It exposes the `lup` CLI entry point (`uv run lup run "task"`, `uv run lup loop "task1" "task2"`) that runs sessions and auto-commits their results. It evolves with your application's requirements, but not via the feedback loop.
-
-## Claude code plugin
-
-This repository contains many quality of life improvements over the barebone claude code experience:
-
-- Hooks for automatically approving and denying edition and code executions: I am too worried with potential prompt injections and hallucination to let Claude Code run python unprompted. Likewise, I have found that letting claude code in auto-edit mode makes a patch of code that's quite unreadable with many questionable decision, no matter the initial direction and content of Claude.md. On the other hand, manually reviewing everything is exhausting and leads to counterproductive decision-fatigue where you just approve everything repeatedly. I have found that auto-denying python calls while pre-approving investigative commands (see #devtools) means it's manageable, and same for auto-accepting small edits.
-- Commands and meta-commands for modifying your experience whenever you find a pain point (like /lup:add-command or /lup:meta)
-- subagents specialized in reading the traces and the different versions of your project, and understanding the strength of one version over another
-- fzf fuzzy matching for @ file references
-
-### Subagents
-
-The plugin ships five subagents that do context-heavy work in their own window and return a compact report:
-
-- **trace-explorer** — reads many session traces in bulk and returns cross-cutting patterns (tool failures, capability gaps, reasoning quality)
-- **version-explorer** — retrieves and diffs agent code across version tags
-- **version-reviewer** — holistic review of one agent version: its prompt, its performance data, what to keep and what to change
-- **implementer** — TDD implementer that writes production code to make tests pass but will not touch test files
-- **resolve-editor** — implements one persisted resolver concern inside its isolated leased worktree
-
-### Hooks
-
-One semantic policy suite drives both generated native dispatchers. It parses
-every shell segment, normalizes URL scopes, evaluates every edit in a batch,
-and applies the canonical marker, protected-path, size, and anti-pattern rules.
-The generated plugin runtimes are hermetic snapshots; `/lup:hooks` changes the
-canonical policy inputs and regenerates both targets. Approval effects that a
-native boundary cannot represent fail closed.
-
-### Claude commands
-
-To speed up development, many claude commands and meta-commands are built in this repository:
-
-- add-command
-- modify-command
-- meta
-- principle
-
-- bump
-
-- commit
-- rebase
-- merge
-- clean-gone
-- close
-
-- create-investigator
-- debug
-- review
-
-- feedback-loop (and its fb-status / fb-investigate / fb-analyze / fb-reflect / fb-implement phases)
-
-- hooks
-- meta
-- principle
-- review
-
-- refactor
-- refactor-tools
-
-- update
-- import
-- brainstorm
-- install
-- init
-
-## Devtools
-
-All development tooling is exposed as the `lup-devtools` CLI (run `uv run lup-devtools --help` for the full tree), aimed at both human use and agent use:
-
-- `agent` — agent introspection and debugging (inspect, serve-tools, repl)
-- `harness` — deterministic Claude/Codex generation, reconciliation, and launch
-- `py` — Python module introspection (info, source, eval, imports, search)
-- `dev` — worktrees, branches, PRs, conflicts, and pre-flight checks
-- `feedback` — feedback state, metrics, and session commits
-- `setup` — interactive setup wizard for integrations and API keys
-- `sync` — upstream sync tracking against the lup template
-- `trace` — trace display, search, and analysis
-- `usage` — Claude Code usage display
-- `version` — agent version, changelog, and bump
+`.claude/CLAUDE.md` and `AGENTS.md` are generated from
+`src/forumboard/devtools/harness/content/guidance.py` — edit the declaration,
+then `uv run lup-devtools harness generate all`.

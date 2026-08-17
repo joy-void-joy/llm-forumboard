@@ -402,6 +402,17 @@ class Settings(BaseSettings, env_file=(".env", ".env.local"), extra="ignore"):
         description="Port the enrolment server binds",
     )
 
+    playwright_browsers_path: Path | None = Field(
+        default=None,
+        validation_alias="PLAYWRIGHT_BROWSERS_PATH",
+        description=(
+            "Where Playwright keeps the browsers it downloads. Playwright's "
+            "own variable, read here so the setup check and the browser it "
+            "checks for cannot disagree about the location. None uses the "
+            "per-platform default."
+        ),
+    )
+
 
 # Singleton instance
 settings = Settings()

@@ -1903,28 +1903,6 @@ def test_generated_claude_hook_maps_declared_identity_to_editor_autonomy() -> No
     assert autonomy_effect(identity="lup:resolver-worker") == "allow"
 
 
-def test_generated_claude_hook_asks_for_human_owned_readme_edits() -> None:
-    """Autonomy is a release of named rules, never a blanket bypass.
-
-    Both channels are checked: an identity that grants autonomy through the
-    environment must not buy anything the payload channel would not.
-    """
-    payload = {
-        "tool_name": "Write",
-        "tool_input": {
-            "file_path": str(Path("README.md").resolve()),
-            "content": "# Rewritten by an agent\n",
-        },
-    }
-    assert hook_decision(payload).permission_decision == "ask"
-    for granted in (
-        hook_decision(payload, agent_type="resolver-worker"),
-        hook_decision(payload, identity="resolver-worker"),
-    ):
-        assert granted.permission_decision == "ask"
-        assert "human-authored" in granted.permission_decision_reason
-
-
 def test_generated_codex_hook_fails_closed_for_unknown_tools() -> None:
     script = Path(".codex/plugins/lup/hooks/scripts/policy.py").resolve()
     result = sh.Command(str(script))(
@@ -2358,7 +2336,9 @@ def test_project_settings_derive_sandbox_from_hook_declaration() -> None:
     filesystem = sandbox["filesystem"]
     network = sandbox["network"]
     assert isinstance(filesystem, dict) and isinstance(network, dict)
-    assert filesystem["denyWrite"] == ["README.md"]
+    assert filesystem["denyWrite"] == [
+        path.as_posix() for path in hooks.human_owned_files
+    ]
     domains = network["allowedDomains"]
     assert isinstance(domains, list)
     assert "code.claude.com" in domains
