@@ -32,6 +32,7 @@ from lup.adapters.harness import (
     compile_codex,
 )
 from lup.codescan.registry import RULE_REFERENCE
+from lup.mcp import ToolDeclaration
 from lup.harness.banner import (
     ARTIFACT_COMMENT_ROUTER,
     REGENERATE_COMMAND,
@@ -73,6 +74,7 @@ from lup.harness.models import (
     SkillPattern,
     SpellingExample,
     TextPart,
+    ToolRoster,
     WatchOutput,
     document_byte_size,
 )
@@ -528,6 +530,12 @@ PART_CONTRACT: dict[str, PartExpectation] = {
     "RelocateSession": PartExpectation(
         part=RelocateSession(path="the path step 1 prints"), diverges=True
     ),
+    "ToolRoster": PartExpectation(
+        part=ToolRoster(
+            tools=[ToolDeclaration(name="write_topic", description="Replace a page")]
+        ),
+        diverges=False,
+    ),
     "WatchOutput": PartExpectation(
         part=WatchOutput(command="lup-devtools harness resolve status"), diverges=True
     ),
@@ -573,7 +581,7 @@ class PartQuestion(BaseModel, frozen=True):
 PART_QUESTIONS: dict[str, PartQuestion] = {
     "text_payload": PartQuestion(
         ask=lambda part: part.text_payload is not None,
-        answered_by=["TextPart", "SpellingExample", "MarkdownTable"],
+        answered_by=["TextPart", "SpellingExample", "MarkdownTable", "ToolRoster"],
     ),
     "invocation": PartQuestion(
         ask=lambda part: part.invocation is not None, answered_by=["SkillInvocation"]
