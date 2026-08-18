@@ -159,6 +159,20 @@ class Settings(BaseSettings, env_file=(".env", ".env.local"), extra="ignore"):
         ),
     )
 
+    prompts_local_path: str = Field(
+        default=".lup/config/prompts.py",
+        validation_alias="FORUMBOARD_PROMPTS_LOCAL_PATH",
+        description=(
+            "A Python file replacing declared prompt pieces by name, absent by "
+            "default. It is where a deployment says who this board is for, "
+            "which is the fact the passes cannot decide without and the one "
+            "that must not reach a published file — so the default sits under "
+            "the gitignored directory already holding the roster, for the same "
+            "reason. A replacement naming no declared piece is an error rather "
+            "than a no-op."
+        ),
+    )
+
     # ==========================================================================
     # LLM ROUTING (optional)
     # ==========================================================================
@@ -326,6 +340,20 @@ class Settings(BaseSettings, env_file=(".env", ".env.local"), extra="ignore"):
         default="./logs",
         validation_alias="AGENT_LOGS_PATH",
         description="Base path for trace logs",
+    )
+
+    stream_agent_blocks: bool = Field(
+        default=True,
+        validation_alias="FORUMBOARD_STREAM_AGENT_BLOCKS",
+        description=(
+            "Print the reviewer's and editor's blocks as each message "
+            "completes, so a pass reading a long transcript is visibly "
+            "working rather than indistinguishable from a hung one. Turn it "
+            "off wherever the terminal is durable and shared — a daemon under "
+            "systemd, or CI — because a pass reasons about the raw "
+            "conversation before it has redacted anything, and its thinking "
+            "quotes what it is deciding to remove."
+        ),
     )
 
     extra_dirs: Annotated[list[Path], NoDecode] = Field(

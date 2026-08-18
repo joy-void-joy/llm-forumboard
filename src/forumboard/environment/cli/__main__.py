@@ -46,6 +46,11 @@ profile_app = typer.Typer(
 )
 app.add_typer(profile_app)
 
+prompts_app = typer.Typer(
+    name="prompts", help="Show what each pass is told, after local replacements"
+)
+app.add_typer(prompts_app)
+
 # The same wizard `lup-devtools setup` serves, mounted here too. Whoever
 # operates this reads `doctor`'s advice and types what it says; sending them to
 # a second CLI to act on it would make the advice wrong.
@@ -179,6 +184,39 @@ def briefings_once(verbose: VerboseOption = False) -> None:
 def once(verbose: VerboseOption = False) -> None:
     """Run one of each pass, in the order a conversation moves through them."""
     run_pass("all", verbose)
+
+
+@prompts_app.command(name="list")
+def list_prompts() -> None:
+    """Show every declared piece, and which this deployment has replaced.
+
+    A replacement that silently changed nothing is the failure this exists to
+    make visible, so the marker beside a piece is the whole point of the
+    listing rather than decoration on it.
+    """
+    from forumboard.agent.prompts import catalog
+
+    replaced = [piece.name for piece in catalog.overrides()]
+    path = catalog.local_path()
+    typer.echo(f"local replacements: {path if path.is_file() else 'none'}\n")
+    for each in catalog.BY_NAME:
+        typer.echo(each.name)
+        for piece in each.composition.pieces:
+            mark = " (replaced)" if piece.name in replaced else ""
+            typer.echo(f"  {piece.name}{mark}")
+
+
+@prompts_app.command(name="show")
+def show_prompt(name: str) -> None:
+    """Print one pass's prompt exactly as the model receives it."""
+    from forumboard.agent.prompts import catalog
+
+    rendered = catalog.rendered(name)
+    if rendered is None:
+        known = ", ".join(each.name for each in catalog.BY_NAME)
+        typer.echo(f"No prompt named {name!r}. There is: {known}", err=True)
+        raise typer.Exit(1)
+    typer.echo(rendered)
 
 
 @app.command()

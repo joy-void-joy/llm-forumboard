@@ -18,7 +18,7 @@ import typer
 
 from forumboard.agent.config import settings
 from forumboard.agent.models import AgentOutput
-from forumboard.agent.prompts import get_system_prompt
+from forumboard.agent.prompts.catalog import get_system_prompt
 from forumboard.agent.subagents import get_subagent_specs
 from forumboard.devtools.agent.serve import collect_registry_tools
 from lup.mcp import LupMcpTool

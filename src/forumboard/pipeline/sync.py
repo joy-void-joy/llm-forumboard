@@ -50,15 +50,19 @@ class SyncOutcome(BaseModel, frozen=True):
     unchanged: int = 0
     failed: int = 0
     note: str = ""
+    pages: list[str] = []
+    """Where each published page can be read. A pass that says it published
+    something and not where is a pass whose one result has to be hunted for."""
 
     def describe(self) -> str:
         """One line for the log."""
         if self.note:
             return f"{self.profile}: {self.note}"
-        return (
+        counts = (
             f"{self.profile}: {self.fetched} fetched, {self.published} published, "
             f"{self.skipped} skipped, {self.unchanged} unchanged, {self.failed} failed"
         )
+        return "\n  ".join([counts, *self.pages])
 
 
 async def to_read(
@@ -168,6 +172,7 @@ class ConversationSync:
             skipped=sum(tally.skipped for tally in tallies),
             unchanged=sum(tally.unchanged for tally in tallies),
             failed=sum(tally.failed for tally in tallies),
+            pages=[url for tally in tallies for url in tally.pages],
         )
 
     async def one(
@@ -232,6 +237,13 @@ class ConversationSync:
             ),
             now,
         )
-        self.store.save_record(record.model_copy(update={"page_id": page.id}))
+        self.store.save_record(
+            record.model_copy(update={"page_id": page.id, "page_url": page.url})
+        )
         logger.info("%s — %s", record.describe(), people.describe())
-        return SyncOutcome(profile=profile, fetched=1, published=1)
+        return SyncOutcome(
+            profile=profile,
+            fetched=1,
+            published=1,
+            pages=[page.url] if page.url else [],
+        )

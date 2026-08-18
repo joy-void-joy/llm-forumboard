@@ -42,6 +42,9 @@ class ConversationRecord(BaseModel, frozen=True):
     edit: EditVerdict | None = None
     page_id: str = ""
     """The Notion page, where one was written."""
+    page_url: str = ""
+    """Where to read that page. Notion returns it beside the id, and a run
+    whose only artifact is a page nobody can reach has not really reported."""
 
     def published(self) -> bool:
         """Whether this conversation reached Notion."""
@@ -52,7 +55,8 @@ class ConversationRecord(BaseModel, frozen=True):
         outcome = (
             self.edit.describe() if self.edit is not None else self.review.describe()
         )
-        return f"{self.conversation_id[:8]} {self.title[:40]!r}: {outcome}"
+        where = f"\n  {self.page_url}" if self.page_url else ""
+        return f"{self.conversation_id[:8]} {self.title[:40]!r}: {outcome}{where}"
 
 
 class ProfileCursor(BaseModel, frozen=True):

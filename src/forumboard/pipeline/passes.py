@@ -30,7 +30,11 @@ from forumboard.agent.models import (
     ReviewResult,
     ReviewVerdict,
 )
-from forumboard.agent.prompts import briefing_prompt, editor_prompt, reviewer_prompt
+from forumboard.agent.prompts.catalog import (
+    briefing_prompt,
+    editor_prompt,
+    reviewer_prompt,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +57,10 @@ async def review(title: str, transcript: str) -> ReviewVerdict:
         f"<conversation>\n{transcript}\n</conversation>"
     )
     result = await run_structured(
-        system_prompt=reviewer_prompt(), task=task, output=ReviewResult
+        system_prompt=reviewer_prompt(),
+        task=task,
+        output=ReviewResult,
+        label="review",
     )
     return result.verdict
 
@@ -71,6 +78,7 @@ async def edit(title: str, transcript: str, plan: ReviewPlan) -> EditVerdict:
             system_prompt=editor_prompt(plan),
             task=f"<conversation>\n{transcript}\n</conversation>",
             output=EditResult,
+            label="edit",
         )
         return result.outcome
     return await chunked_edit(title, transcript, plan)
@@ -129,7 +137,10 @@ async def chunked_edit(title: str, transcript: str, plan: ReviewPlan) -> EditVer
         )
         if not index:
             opening = await run_structured(
-                system_prompt=editor_prompt(plan), task=task, output=EditResult
+                system_prompt=editor_prompt(plan),
+                task=task,
+                output=EditResult,
+                label=f"edit 1/{len(pieces)}",
             )
             published = opening.outcome.publishable()
             if published is None:
@@ -138,7 +149,10 @@ async def chunked_edit(title: str, transcript: str, plan: ReviewPlan) -> EditVer
             removed += published.redactions_made
             continue
         span = await run_structured(
-            system_prompt=editor_prompt(plan), task=task, output=ChunkEdit
+            system_prompt=editor_prompt(plan),
+            task=task,
+            output=ChunkEdit,
+            label=f"edit {index + 1}/{len(pieces)}",
         )
         edited.append(span.transcript)
         removed += span.redactions_made
@@ -154,6 +168,7 @@ async def chunked_edit(title: str, transcript: str, plan: ReviewPlan) -> EditVer
             f"<conversation>\n{whole}\n</conversation>"
         ),
         output=TranscriptDigest,
+        label="digest",
     )
     return PublishedDiscussion(
         title=digest.title or title,
@@ -171,4 +186,5 @@ async def briefing(cadence: str, window: str, discussions: str) -> Briefing:
         system_prompt=briefing_prompt(cadence, window),
         task=f"<discussions>\n{discussions}\n</discussions>",
         output=Briefing,
+        label=f"briefing {cadence}",
     )
