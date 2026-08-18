@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from pydantic import BaseModel
 
-from forumboard.agent import prompts
+from forumboard.agent.prompts import catalog as prompts, shared
 from forumboard.agent.config import aux_model, engine_for_settings, settings
 from lup.runtime.contracts import Session, Turn
 from lup.runtime.factory import SessionFactory
@@ -50,7 +50,7 @@ def test_the_redaction_contract_reaches_every_prompt_that_sees_a_transcript() ->
     reads a transcript without it, this is what says so.
     """
     for prompt in transcript_prompts():
-        assert prompts.REDACTION_CONTRACT in prompt
+        assert shared.REDACTION_CONTRACT.text in prompt
 
 
 def test_both_passes_apply_the_same_sensitivity_test() -> None:
@@ -60,7 +60,7 @@ def test_both_passes_apply_the_same_sensitivity_test() -> None:
     authority arbitrary rather than a backstop.
     """
     for prompt in transcript_prompts():
-        assert prompts.SENSITIVITY_TEST in prompt
+        assert shared.SENSITIVITY_TEST.text in prompt
 
 
 def test_the_editor_is_told_it_may_refuse() -> None:

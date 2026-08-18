@@ -73,7 +73,7 @@ from forumboard.agent.config import (
     settings,
 )
 from forumboard.agent.models import AgentOutput, AgentSessionResult
-from forumboard.agent.prompts import get_system_prompt
+from forumboard.agent.prompts.catalog import get_system_prompt
 
 logger = logging.getLogger(__name__)
 

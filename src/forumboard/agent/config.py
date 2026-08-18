@@ -159,6 +159,20 @@ class Settings(BaseSettings, env_file=(".env", ".env.local"), extra="ignore"):
         ),
     )
 
+    prompts_local_path: str = Field(
+        default=".lup/config/prompts.py",
+        validation_alias="FORUMBOARD_PROMPTS_LOCAL_PATH",
+        description=(
+            "A Python file replacing declared prompt pieces by name, absent by "
+            "default. It is where a deployment says who this board is for, "
+            "which is the fact the passes cannot decide without and the one "
+            "that must not reach a published file — so the default sits under "
+            "the gitignored directory already holding the roster, for the same "
+            "reason. A replacement naming no declared piece is an error rather "
+            "than a no-op."
+        ),
+    )
+
     # ==========================================================================
     # LLM ROUTING (optional)
     # ==========================================================================

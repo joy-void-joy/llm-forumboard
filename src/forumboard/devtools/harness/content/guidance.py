@@ -39,7 +39,9 @@ Everything here serves one sequence, and the order of its gates is the design:
 
 ### Two Invariants
 
-**Redaction removes; it never marks.** A `[REDACTED]` beside a name announces that this person's something was sensitive, and often what kind. The contract is that the text must read as though the removed part was never said. It is declared once, in `agent/prompts.py`, and quoted into every prompt that touches a transcript — never restated in prose that could drift from it.
+**Redaction removes; it never marks.** A `[REDACTED]` beside a name announces that this person's something was sensitive, and often what kind. The contract is that the text must read as though the removed part was never said. It is declared once, in `agent/prompts/shared.py`, and composed into every prompt that touches a transcript — never restated in prose that could drift from it.
+
+**A prompt is a composition, not a string.** `agent/prompts/` declares each pass as named pieces, and a gitignored `.lup/config/prompts.py` replaces any of them by name. Who reads this board lives there rather than in committed source, for the reason the roster does — and because a pass left to infer its audience infers a different one on different runs, which is how the same conversation is skipped as confidential once and published the next time. A replacement naming no declared piece raises rather than silently doing nothing. `forumboard prompts list` says what is declared and what this deployment replaced; `forumboard prompts show <pass>` prints what the model actually receives.
 
 **The worldview is rewritten, never appended to.** It answers "what is happening now". A page that accumulates becomes a log, and a log cannot answer that. `write_topic` replaces a page; there is deliberately no append.
 

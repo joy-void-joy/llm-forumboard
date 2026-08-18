@@ -40,7 +40,7 @@ from lup.devtools.dev import conflicts
 from forumboard.devtools.dev.app import app as dev_app, declared
 from lup.devtools.harness.resolve import ConfiguredModel
 from forumboard.agent.config import engine_for_model, settings
-from forumboard.agent.prompts import get_system_prompt
+from forumboard.agent.prompts.catalog import get_system_prompt
 from forumboard.devtools.harness.composition import (
     REPOSITORY_WIDE,
     TARGETS,
@@ -64,7 +64,7 @@ def agent_prompt() -> AgentPrompt:
     return AgentPrompt(
         sections=[rendered],
         rendered=rendered,
-        source=Path("src/forumboard/agent/prompts.py"),
+        source=Path("src/forumboard/agent/prompts/catalog.py"),
     )
 
 

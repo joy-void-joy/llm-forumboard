@@ -30,7 +30,11 @@ from forumboard.agent.models import (
     ReviewResult,
     ReviewVerdict,
 )
-from forumboard.agent.prompts import briefing_prompt, editor_prompt, reviewer_prompt
+from forumboard.agent.prompts.catalog import (
+    briefing_prompt,
+    editor_prompt,
+    reviewer_prompt,
+)
 
 logger = logging.getLogger(__name__)
 
