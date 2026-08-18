@@ -6,6 +6,11 @@ since the last decision; and it reaches Notion only if two independent passes
 both said it should. Each guard exists because the step after it is expensive
 or irreversible, and every one of them is cheap.
 
+The first guard has an opening, and it is the one place it should. A profile
+with no cursor has no "moved" to answer to, and the lookback standing in for
+one answers nothing at all on an account quieter than the window — so a first
+pass seeds instead, and the guard closes behind it.
+
 Failures are per profile and per conversation. An expired session stalls one
 person's sync and says so; it does not stop everybody else's, and it does not
 advance a cursor past conversations that were never read.
@@ -56,6 +61,35 @@ class SyncOutcome(BaseModel, frozen=True):
         )
 
 
+async def to_read(
+    client: ClaudeWebClient, since: datetime, *, seeding: bool
+) -> list[ConversationMeta]:
+    """What a pass reads: the window, widened to a seed on a first pass.
+
+    The lookback window is what keeps enrolling somebody from importing their
+    whole history. On an account quieter than the window it asks for nothing at
+    all, and a first pass that publishes nothing is indistinguishable from a
+    broken sync — so a profile with no cursor reaches past the window for the
+    newest few, once. Every pass after it has a cursor, and is the window alone.
+
+    The seed is added to the window rather than replacing it, so widening the
+    reach can only ever read more than the window would have.
+    """
+    window = await client.conversations(
+        limit=settings.sync_max_conversations, updated_after=since
+    )
+    seed = settings.sync_seed_conversations
+    if not seeding or len(window) >= seed:
+        return window
+    listed = await client.conversations(limit=settings.sync_max_conversations)
+    already = {meta.uuid for meta in window}
+    return window + [
+        meta
+        for meta in ConversationMeta.newest_first(listed)[:seed]
+        if meta.uuid not in already
+    ]
+
+
 class ConversationSync:
     """Reads the enrolled profiles and publishes what survives review."""
 
@@ -66,11 +100,14 @@ class ConversationSync:
         store: ConversationStore,
         context: ForumboardContext,
         roster: Roster,
+        dry_run: bool = False,
     ) -> None:
         self.profiles_root = profiles_root
         self.store = store
         self.context = context
         self.roster = roster
+        self.dry_run = dry_run
+        """Report what would be read and stop before the first Opus call."""
 
     def client_for(self, profile: str) -> ClaudeWebClient:
         """A claude.ai client backed by one profile's stored browser session."""
@@ -91,9 +128,7 @@ class ConversationSync:
         since = cursor.updated_through or floor
 
         try:
-            metas = await client.conversations(
-                limit=settings.sync_max_conversations, updated_after=since
-            )
+            metas = await to_read(client, since, seeding=cursor.updated_through is None)
         except SessionExpired as expired:
             return SyncOutcome(
                 profile=profile,
@@ -103,7 +138,20 @@ class ConversationSync:
             return SyncOutcome(profile=profile, note=f"could not list: {error}")
 
         if not metas:
-            return SyncOutcome(profile=profile, note="nothing new")
+            return SyncOutcome(
+                profile=profile,
+                note=(
+                    f"nothing under {client.organization} touched since "
+                    f"{since.isoformat()} — `forumboard profile probe {profile}` "
+                    "says what that session can see"
+                ),
+            )
+
+        if self.dry_run:
+            named = ", ".join(f"{meta.uuid[:8]} {meta.name[:40]!r}" for meta in metas)
+            return SyncOutcome(
+                profile=profile, note=f"would read {len(metas)}: {named}"
+            )
 
         tallies = [await self.one(profile, meta, client) for meta in metas]
         advanced = cursor

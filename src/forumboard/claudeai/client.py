@@ -19,7 +19,7 @@ a dictionary lookup to the tooling that audits this repository.
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
-from datetime import datetime
+from datetime import datetime, timezone
 from http.cookies import SimpleCookie
 from pathlib import PurePosixPath
 from urllib.parse import urlparse
@@ -120,6 +120,19 @@ class ConversationMeta(BaseModel, extra="ignore"):
     def updated(self) -> datetime | None:
         """When it was last touched, as far as the listing knows."""
         return parse_timestamp(self.updated_at)
+
+    @classmethod
+    def newest_first(cls, metas: list["ConversationMeta"]) -> list["ConversationMeta"]:
+        """These conversations, most recently touched first.
+
+        The listing already arrives in that order. Sorting it again is for the
+        caller that takes a head rather than the whole list, which would take
+        the wrong conversations without saying so if the service ever changed
+        its mind. An entry whose timestamp the listing omitted sorts last,
+        rather than being dropped for having none.
+        """
+        epoch = datetime.fromtimestamp(0, timezone.utc)
+        return sorted(metas, key=lambda meta: meta.updated() or epoch, reverse=True)
 
 
 class ConversationContent(BaseModel, frozen=True):

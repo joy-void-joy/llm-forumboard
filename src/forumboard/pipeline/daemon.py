@@ -43,13 +43,14 @@ class Pipeline:
         notes = (project_root / settings.notes_path).resolve()
         self.store = ConversationStore(notes / "conversations")
 
-    async def sync_once(self) -> list[str]:
+    async def sync_once(self, *, dry_run: bool = False) -> list[str]:
         """One sync pass over whoever is enrolled right now."""
         sync = ConversationSync(
             profiles_root=self.profiles_root,
             store=self.store,
             context=self.context,
             roster=read_roster(self.project_root),
+            dry_run=dry_run,
         )
         return [outcome.describe() for outcome in await sync.run_once()]
 
