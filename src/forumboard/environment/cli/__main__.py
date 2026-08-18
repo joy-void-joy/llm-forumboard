@@ -323,6 +323,64 @@ def probe(name: str) -> None:
 
 
 @profile_app.command()
+def fetch(
+    name: str,
+    conversation: Annotated[
+        str,
+        typer.Argument(
+            help="A conversation id, or a claude.ai/share/... link", metavar="REFERENCE"
+        ),
+    ],
+    verbose: VerboseOption = False,
+) -> None:
+    """Fetch one conversation into its folder, deciding nothing about it.
+
+    Reads only: it writes the transcript and the files it names, and touches
+    neither the cursor, nor the records, nor Notion. A sync is how a
+    conversation gets judged; this is how one gets looked at, which until now
+    could only be done by running the whole pipeline over whatever the cursor
+    happened to admit.
+
+    A share link is accepted wherever a conversation id is, so a conversation
+    somebody sent you can be read without it being in this account.
+
+    It writes into the same folder a sync reads, so what a pass would see is
+    exactly what lands here.
+    """
+    from forumboard.claudeai.browser import ProfileCredentials, context_dir
+    from forumboard.claudeai.client import (
+        ClaudeWebError,
+        ClaudeWebClient,
+        ConversationReference,
+    )
+    from forumboard.store import ConversationStore
+
+    if verbose:
+        configure_logging(verbose)
+    notes = (project_root() / settings.notes_path).resolve()
+    store = ConversationStore(notes / "conversations")
+    reference = ConversationReference(value=conversation)
+    client = ClaudeWebClient(ProfileCredentials(context_dir(profiles_root(), name)))
+    try:
+        content = asyncio.run(reference.fetch(client))
+    except ClaudeWebError as error:
+        typer.echo(f"Could not read {reference.describe()}: {error}", err=True)
+        raise typer.Exit(1) from error
+
+    store.save_conversation(name, content)
+    report(
+        [
+            f"{content.name or '(untitled)'} — {content.message_count} messages",
+            f"wrote {store.conversation_dir(name, content.uuid)}",
+            *[
+                f"  attachments/{attachment.relative_path()}"
+                for attachment in content.attachments
+            ],
+        ]
+    )
+
+
+@profile_app.command()
 def status(name: str) -> None:
     """Show what has been decided about one profile's conversations."""
     from forumboard.store import ConversationStore
