@@ -98,7 +98,7 @@ def report(lines: list[str]) -> None:
         typer.echo(line)
 
 
-async def one_pass(which: str) -> list[str]:
+async def one_pass(which: str, *, dry_run: bool = False) -> list[str]:
     """Open the pipeline and run a single named pass."""
     from forumboard.context import NotConfigured
     from forumboard.pipeline.daemon import open_pipeline
@@ -109,7 +109,7 @@ async def one_pass(which: str) -> list[str]:
         raise typer.Exit(1) from error
     match which:
         case "sync":
-            return await pipeline.sync_once()
+            return await pipeline.sync_once(dry_run=dry_run)
         case "worldview":
             return await pipeline.worldview_once()
         case "briefings":
@@ -118,13 +118,13 @@ async def one_pass(which: str) -> list[str]:
             return await pipeline.all_once()
 
 
-def run_pass(which: str, verbose: bool) -> None:
+def run_pass(which: str, verbose: bool, *, dry_run: bool = False) -> None:
     """Run one pass, reporting a configuration problem rather than a traceback."""
     from forumboard.context import NotConfigured
 
     configure_logging(verbose)
     try:
-        report(asyncio.run(one_pass(which)))
+        report(asyncio.run(one_pass(which, dry_run=dry_run)))
     except NotConfigured as error:
         typer.echo(f"Not configured: {error}", err=True)
         raise typer.Exit(1) from error
@@ -147,9 +147,20 @@ def run(verbose: VerboseOption = False) -> None:
 
 
 @app.command(name="sync-once")
-def sync_once(verbose: VerboseOption = False) -> None:
-    """Fetch, review, edit, and publish one round of new conversations."""
-    run_pass("sync", verbose)
+def sync_once(
+    verbose: VerboseOption = False,
+    dry_run: Annotated[
+        bool,
+        typer.Option("--dry-run", help="Name what would be read, and stop there"),
+    ] = False,
+) -> None:
+    """Fetch, review, edit, and publish one round of new conversations.
+
+    ``--dry-run`` stops after the listing, before the first Opus call and
+    anything reaching Notion. It is what says whether a quiet pass read
+    nothing or decided against everything it read.
+    """
+    run_pass("sync", verbose, dry_run=dry_run)
 
 
 @app.command(name="worldview-once")

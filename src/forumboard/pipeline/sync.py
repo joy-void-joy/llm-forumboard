@@ -100,11 +100,14 @@ class ConversationSync:
         store: ConversationStore,
         context: ForumboardContext,
         roster: Roster,
+        dry_run: bool = False,
     ) -> None:
         self.profiles_root = profiles_root
         self.store = store
         self.context = context
         self.roster = roster
+        self.dry_run = dry_run
+        """Report what would be read and stop before the first Opus call."""
 
     def client_for(self, profile: str) -> ClaudeWebClient:
         """A claude.ai client backed by one profile's stored browser session."""
@@ -142,6 +145,12 @@ class ConversationSync:
                     f"{since.isoformat()} — `forumboard profile probe {profile}` "
                     "says what that session can see"
                 ),
+            )
+
+        if self.dry_run:
+            named = ", ".join(f"{meta.uuid[:8]} {meta.name[:40]!r}" for meta in metas)
+            return SyncOutcome(
+                profile=profile, note=f"would read {len(metas)}: {named}"
             )
 
         tallies = [await self.one(profile, meta, client) for meta in metas]
