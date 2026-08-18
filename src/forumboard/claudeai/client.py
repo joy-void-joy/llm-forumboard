@@ -371,9 +371,18 @@ class ConversationDetail(PathBuilder, frozen=True):
 class ClaudeWebClient:
     """One profile's view of claude.ai."""
 
-    def __init__(self, source: CredentialSource, *, timeout: int = 30) -> None:
+    def __init__(
+        self, source: CredentialSource, *, timeout: int = 30, organization: str = ""
+    ) -> None:
         self.source = source
+        self.pinned = organization
+        """An organisation a caller named outright, which is obeyed as given.
+
+        A diagnostic asking what one organisation holds means that one, and a
+        resolution that quietly answered about a better one would report the
+        wrong thing under its name."""
         self.organization = ""
+        """The organisation resolved for this client, cached until a retry."""
         self.timeout = timeout
 
     def headers(self, cookie: str) -> StringMap:
@@ -383,8 +392,6 @@ class ClaudeWebClient:
     async def session(self, *, refresh: bool) -> str:
         """The cookie to present, refusing loudly when there is none."""
         credentials = await self.source.credentials(refresh=refresh)
-        if credentials.organization:
-            self.organization = credentials.organization
         if not credentials.usable():
             raise SessionExpired("no claude.ai session available for this profile")
         return cookie_header(credentials.cookie)
@@ -415,13 +422,6 @@ class ClaudeWebClient:
 
         return list(parsed())
 
-    async def organizations(self, client: httpx.AsyncClient, cookie: str) -> list[str]:
-        """Organisation ids, chat-capable first."""
-        known = await self.organization_entries(client, cookie)
-        return [entry.uuid for entry in known if entry.chat_capable()] + [
-            entry.uuid for entry in known if not entry.chat_capable()
-        ]
-
     async def account_organizations(self) -> list[OrganizationEntry]:
         """Every organisation this profile's session can see.
 
@@ -435,14 +435,39 @@ class ClaudeWebClient:
             )
 
     async def resolve_organization(self, client: httpx.AsyncClient, cookie: str) -> str:
-        """The organisation to read under, preferring a chat-capable one."""
-        if self.organization:
-            return self.organization
-        available = await self.organizations(client, cookie)
-        if not available:
+        """The organisation to read under, which has to be one carrying chat.
+
+        A hint — the credential source's, or the cookie's own ``lastActiveOrg``
+        — says which organisation the account was last in, and is worth
+        honouring so somebody with two of them gets the one they were using.
+        It is honoured only where the account reports chat under it. An account
+        usually has a console organisation beside the chat one, and reading
+        under that answers an empty listing or a 403, neither of which reads as
+        "the wrong organisation" to whoever is looking at the silence.
+
+        Both hints are read here rather than left for :meth:`session` to record
+        on the way past, so what this decides depends on its arguments and its
+        source rather than on having been called in the right order.
+        """
+        if resolved := self.pinned or self.organization:
+            return resolved
+        known = await self.organization_entries(client, cookie)
+        if not known:
             raise ClaudeWebError("this account has no organizations")
-        hint = organization_hint(cookie)
-        self.organization = hint if hint in available else available[0]
+        offered = await self.source.credentials(refresh=False)
+        chatting = [entry.uuid for entry in known if entry.chat_capable()]
+        honoured = [
+            candidate
+            for candidate in (offered.organization, organization_hint(cookie))
+            if candidate in chatting
+        ]
+        if not chatting:
+            logger.warning(
+                "no organisation on this account reports a chat capability; "
+                "reading under %s anyway",
+                known[0].uuid,
+            )
+        self.organization = (honoured + chatting + [known[0].uuid])[0]
         return self.organization
 
     async def reading_organization(self) -> str:

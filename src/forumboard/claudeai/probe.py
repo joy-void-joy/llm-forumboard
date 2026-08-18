@@ -89,7 +89,8 @@ class ProfileProbe(BaseModel, frozen=True):
             return "named by the session's lastActiveOrg cookie"
         if self.hint:
             return (
-                f"chosen from the account's own list; lastActiveOrg names {self.hint}"
+                "chosen from the account's own list; the lastActiveOrg cookie "
+                f"names {self.hint}, which was not honoured"
             )
         return "chosen from the account's own list"
 
@@ -219,11 +220,15 @@ async def probe_profile(
         )
 
     def pinned(entry: OrganizationEntry) -> ClaudeWebClient:
-        """A client that reads under exactly one organisation."""
+        """A client that reads under exactly one organisation.
+
+        Pinned rather than hinted: a report on what an organisation holds has
+        to be about the one it names, including the one whose capability would
+        have made resolution pass over it.
+        """
         return ClaudeWebClient(
-            StaticCredentials(
-                ClaudeCredentials(cookie=credentials.cookie, organization=entry.uuid)
-            )
+            StaticCredentials(ClaudeCredentials(cookie=credentials.cookie)),
+            organization=entry.uuid,
         )
 
     return ProfileProbe(
