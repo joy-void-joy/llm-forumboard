@@ -148,7 +148,7 @@ class ConversationSync:
             )
 
         if self.dry_run:
-            named = ", ".join(f"{meta.uuid[:8]} {meta.name[:40]!r}" for meta in metas)
+            named = ", ".join(f"{meta.uuid[:8]} {meta.name!r}" for meta in metas)
             return SyncOutcome(
                 profile=profile, note=f"would read {len(metas)}: {named}"
             )

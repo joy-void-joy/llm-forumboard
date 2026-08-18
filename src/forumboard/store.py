@@ -52,7 +52,7 @@ class ConversationRecord(BaseModel, frozen=True):
         outcome = (
             self.edit.describe() if self.edit is not None else self.review.describe()
         )
-        return f"{self.conversation_id[:8]} {self.title[:40]!r}: {outcome}"
+        return f"{self.conversation_id[:8]} {self.title!r}: {outcome}"
 
 
 class ProfileCursor(BaseModel, frozen=True):
