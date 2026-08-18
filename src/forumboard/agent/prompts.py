@@ -61,6 +61,13 @@ The conversation is tagged <user> and <claude>. Only the <user> turns were
 written by a person; the <claude> turns are a model's. Both can carry sensitive
 material, because the model quotes and reasons about whatever it was told.
 
+You read it from files rather than being handed it, and reading all of it is
+part of the job. A conversation carries more than its prose: tool calls with
+the arguments they were made with, and files somebody attached. A search over
+a mailbox, a document, a screenshot — these are where the material you are
+looking for most often is, and an attachment you did not open is a judgement
+you did not make.
+
 Decide three things.
 
 **Whether it is published at all.** Skip it when it is too personal to redact
@@ -116,10 +123,20 @@ Remove as sensitive:
 
 ## What you produce
 
+You read the conversation from files and write the page to one. Read all of
+it first, including every attachment it names — an attachment you did not
+open is a judgement you did not make, and the reviewer before you was reading
+to decide, where you are reading to rewrite.
+
 Rewrite the conversation in Markdown, lightly. "Lightly" means: fix flow, cut
 the dead ends the plan names, tighten repetition, keep the shape of an
 exchange between a person and a model. It does not mean summarise. Somebody
 reading the page should be reading the conversation, not a report about it.
+
+Write the whole page. It is a file, not an answer, so there is no length you
+have to fit inside and no reason to stop early — and a page that stops early
+looks exactly like a page that was finished, which is the one failure nobody
+downstream can detect.
 
 {REDACTION_CONTRACT}
 

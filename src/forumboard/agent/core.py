@@ -537,22 +537,28 @@ def build_auxiliary_factory(
     tools: list[str] | None = None,
     thinking_budget: int | None = None,
     max_turns: int | None = None,
+    workspace: Path | None = None,
 ) -> SessionFactory:
     """Build a one-shot nested/reviewer factory through the same route.
 
     A nested agent's bounds are the caller's: it is one query with a job, so
     the turn cap and thinking budget belong to whoever declared that job
     rather than to the session settings a whole run shares.
+
+    ``workspace`` is the directory a session that holds tools works inside,
+    and it is the whole of what such a session can reach. Naming one also
+    turns on the session defaults, because a pass that stops to ask
+    permission is a pass a daemon waits on forever.
     """
     return decorate_factory(
         provider_factory(
             model=model,
             system_prompt=system_prompt,
-            cwd=Path.cwd(),
+            cwd=workspace or Path.cwd(),
             tools=tools,
             allowed_tools=tools,
             coding_harness_preset=False,
-            session_defaults=False,
+            session_defaults=workspace is not None,
             thinking_budget=thinking_budget,
             max_turns=max_turns,
         )
@@ -566,18 +572,27 @@ async def run_structured[T: BaseModel](
     output: type[T],
     model: str | None = None,
     max_turns: int | None = None,
+    workspace: Path | None = None,
+    tools: list[str] | None = None,
 ) -> T:
-    """One tool-less query that has to answer in ``output``'s shape.
+    """One query that has to answer in ``output``'s shape.
 
-    This is what the reviewer and the editor are: a job, some text, and a
-    required shape. They get no tools deliberately — everything they need is
-    in the prompt, and a tool would only give them somewhere else to reach.
+    Tool-less by default, which is still right for a job whose whole input
+    fits in the prompt. A pass given a ``workspace`` is the other kind: its
+    input is a directory — a transcript beside the files it names — because
+    a prompt carries text and an uploaded document is not text.
+
+    The tools such a pass gets are the ones that read that directory, and the
+    directory is the whole of what it can reach. That boundary is the answer
+    to the objection these passes were tool-less for: a tool is somewhere
+    else to reach, so the reaching is bounded to one conversation.
     """
     factory = build_auxiliary_factory(
         model=model or settings.model,
         system_prompt=system_prompt,
-        tools=list[str](),
+        tools=tools if tools is not None else list[str](),
         max_turns=max_turns,
+        workspace=workspace,
     )
     async with factory.open() as handle:
         turn = await handle.session.start(turn_request(task, output))

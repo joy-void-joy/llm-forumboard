@@ -149,16 +149,6 @@ class Settings(BaseSettings, env_file=(".env", ".env.local"), extra="ignore"):
             return [name for part in parts if (name := part.strip())]
         return value
 
-    editor_whole_transcript_chars: int = Field(
-        default=400_000,
-        validation_alias="FORUMBOARD_EDITOR_WHOLE_TRANSCRIPT_CHARS",
-        description=(
-            "Transcripts up to this size are edited in one pass. Past it the "
-            "editor works in sequential chunks carrying the plan and what it "
-            "already wrote, because truncating would drop content silently."
-        ),
-    )
-
     # ==========================================================================
     # LLM ROUTING (optional)
     # ==========================================================================

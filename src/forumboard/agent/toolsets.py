@@ -7,10 +7,19 @@ addressed as ``mcp__worldview__foo`` on every backend. Grouping is also what
 lets the policy withhold a whole capability at once — with no Notion token
 configured, the worldview group is simply not served.
 
-This project has one tool-using agent, the worldview builder, so there is one
-group. The reviewer and the editor take no tools at all: they are one-shot
-structured-output calls over text that is already in hand, and a tool would
-only give them a way to reach something they should not.
+This project has one agent whose tools are *this project's*, the worldview
+builder, so there is one group. The reviewer and the editor hold tools too,
+but not from here: theirs are the runtime's own file tools, and what bounds
+them is not a registry but a directory. Each is opened with one conversation's
+folder as its working directory, so the whole of what it can reach is the
+conversation it was asked about — which is what makes reading a file safe
+where reaching a service would not be, and why those tools are granted at the
+session rather than served here.
+
+They need them because a conversation is not only prose. Somebody attached a
+document, and a document is a file; no prompt can carry one, and a pass that
+cannot open it is deciding what may be published about material it has not
+seen.
 """
 
 from typing import TYPE_CHECKING, Literal, TypedDict
