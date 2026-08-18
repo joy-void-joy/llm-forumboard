@@ -1,5 +1,6 @@
 """Application composition roots over Lup's provider-neutral runtime."""
 
+import asyncio
 import logging
 from collections.abc import AsyncGenerator, Callable
 from contextlib import asynccontextmanager
@@ -28,6 +29,7 @@ from lup.adapters.codex.runtime import (
     CodexSessionConfig,
     create_codex_session_factory,
 )
+from lup.runtime.contracts import EventStream
 from lup.runtime.factory import SessionFactory
 from lup.hooks import LupHooksConfig
 from lup.runtime.models import (
@@ -559,6 +561,48 @@ def build_auxiliary_factory(
     )
 
 
+@asynccontextmanager
+async def streaming_blocks(events: EventStream | None) -> AsyncGenerator[None]:
+    """Print a turn's blocks as it produces them, for the duration of a turn.
+
+    The tool-less passes reach ``decorate_factory`` without the notes and
+    trace logger its display sink is gated on, so they are silent for as long
+    as a model takes to read a whole transcript — which reads as a hung run
+    rather than a working one. This asks the turn for its events instead, and
+    prints through the same helper a tool-using session displays with, so both
+    read the same way.
+
+    ``events()`` rather than ``live()``: the durable view arrives a completed
+    block at a time, which is the granularity a reader follows, where deltas
+    would be a character stream nobody watches.
+    """
+    if events is None or not settings.stream_agent_blocks:
+        yield
+        return
+    from lup.telemetry.display import ColorAssigner, print_block
+
+    colors = ColorAssigner()
+
+    async def consume() -> None:
+        async for event in events.events():
+            if (message := event.completed_message) is None:
+                continue
+            for block in message.blocks:
+                print_block(block.telemetry_block, colors=colors)
+
+    printing = asyncio.create_task(consume())
+    try:
+        yield
+    finally:
+        # The adapter closes the stream from its own `finally`, so this drains
+        # rather than hanging even where the turn failed. Displaying is
+        # diagnostics: a failure to print must not be what ends a pass.
+        try:
+            await printing
+        except Exception:
+            logger.exception("streaming the turn's blocks failed")
+
+
 async def run_structured[T: BaseModel](
     *,
     system_prompt: str,
@@ -581,7 +625,8 @@ async def run_structured[T: BaseModel](
     )
     async with factory.open() as handle:
         turn = await handle.session.start(turn_request(task, output))
-        result = await turn.turn.result()
+        async with streaming_blocks(turn.events):
+            result = await turn.turn.result()
     if result.output is None:
         raise ValueError(
             f"the model finished without producing a {output.__name__}; "

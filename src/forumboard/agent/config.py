@@ -328,6 +328,20 @@ class Settings(BaseSettings, env_file=(".env", ".env.local"), extra="ignore"):
         description="Base path for trace logs",
     )
 
+    stream_agent_blocks: bool = Field(
+        default=True,
+        validation_alias="FORUMBOARD_STREAM_AGENT_BLOCKS",
+        description=(
+            "Print the reviewer's and editor's blocks as each message "
+            "completes, so a pass reading a long transcript is visibly "
+            "working rather than indistinguishable from a hung one. Turn it "
+            "off wherever the terminal is durable and shared — a daemon under "
+            "systemd, or CI — because a pass reasons about the raw "
+            "conversation before it has redacted anything, and its thinking "
+            "quotes what it is deciding to remove."
+        ),
+    )
+
     extra_dirs: Annotated[list[Path], NoDecode] = Field(
         default=[],
         validation_alias="AGENT_EXTRA_DIRS",
