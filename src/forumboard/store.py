@@ -43,6 +43,16 @@ from forumboard.claudeai.client import Attachment, ConversationContent
 
 logger = logging.getLogger(__name__)
 
+# The names inside a conversation folder, spelled once. The passes are told
+# these in their prompt and this store reads what they leave, so a second
+# spelling elsewhere would let the editor write where nothing looks.
+# lup: ignore[constant-declaration] — a layout identity this repository defines
+TRANSCRIPT_FILE = "conversation.md"
+# lup: ignore[constant-declaration] — the same layout, on the other side
+PAGE_FILE = "page.md"
+# lup: ignore[constant-declaration] — and where the files it names are put
+ATTACHMENTS_DIR = "attachments"
+
 
 class ConversationRecord(BaseModel, frozen=True):
     """What one pass decided about one conversation."""
@@ -113,15 +123,15 @@ class ConversationStore:
 
     def transcript_path(self, profile: str, conversation_id: str) -> Path:
         """Where a raw transcript is kept."""
-        return self.conversation_dir(profile, conversation_id) / "conversation.md"
+        return self.conversation_dir(profile, conversation_id) / TRANSCRIPT_FILE
 
     def attachments_dir(self, profile: str, conversation_id: str) -> Path:
         """Where a conversation's uploaded files are kept."""
-        return self.conversation_dir(profile, conversation_id) / "attachments"
+        return self.conversation_dir(profile, conversation_id) / ATTACHMENTS_DIR
 
     def page_path(self, profile: str, conversation_id: str) -> Path:
         """Where the editor writes the page, when it writes one."""
-        return self.conversation_dir(profile, conversation_id) / "page.md"
+        return self.conversation_dir(profile, conversation_id) / PAGE_FILE
 
     def record_path(self, profile: str, conversation_id: str) -> Path:
         """Where the decision about a conversation is kept."""
@@ -131,6 +141,25 @@ class ConversationStore:
         """Where a profile's high-water mark is kept."""
         return self.profile_dir(profile) / "cursor.json"
 
+    def write_original(self, path: Path, text: str) -> Path:
+        """Write one of the fetched files and leave it read-only.
+
+        The editor works inside this folder holding a tool that can write, and
+        it is told to write only its page. Told is weaker than cannot, and
+        what stands beside that page is the unedited original — the input to
+        redaction, and the one thing here that re-running the pass would not
+        bring back. So the file says no as well.
+
+        Not a security boundary: whoever runs this owns the directory. It is
+        the difference between an instruction and a mistake that cannot happen.
+        """
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if path.exists():
+            path.chmod(0o644)
+        path.write_text(text)
+        path.chmod(0o444)
+        return path
+
     def save_transcript(
         self, profile: str, conversation_id: str, markdown: str
     ) -> Path:
@@ -139,10 +168,9 @@ class ConversationStore:
         Replacing rather than appending: a conversation that grew is the same
         conversation, and two copies would let a later pass edit the shorter one.
         """
-        path = self.transcript_path(profile, conversation_id)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(markdown)
-        return path
+        return self.write_original(
+            self.transcript_path(profile, conversation_id), markdown
+        )
 
     def save_attachment(
         self, profile: str, conversation_id: str, attachment: Attachment
@@ -152,12 +180,10 @@ class ConversationStore:
         The attachment decides its own path, so what the transcript tells a
         reader to open and what is written cannot disagree.
         """
-        path = (
-            self.attachments_dir(profile, conversation_id) / attachment.relative_path()
+        return self.write_original(
+            self.attachments_dir(profile, conversation_id) / attachment.relative_path(),
+            attachment.extracted_content,
         )
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(attachment.extracted_content)
-        return path
 
     def save_conversation(self, profile: str, content: ConversationContent) -> Path:
         """Write a conversation and everything it carried.
