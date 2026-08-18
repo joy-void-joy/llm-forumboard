@@ -381,6 +381,76 @@ def fetch(
 
 
 @profile_app.command()
+def decide(
+    name: str,
+    conversation: Annotated[
+        str,
+        typer.Argument(
+            help="A conversation id already fetched into its folder",
+            metavar="CONVERSATION_ID",
+        ),
+    ],
+    title: Annotated[
+        str,
+        typer.Option(
+            help="The title, where no record from an earlier pass carries one"
+        ),
+    ] = "",
+    verbose: VerboseOption = False,
+) -> None:
+    """Review and edit one fetched conversation, publishing nothing.
+
+    The two model passes and nothing around them: no listing, no cursor, no
+    Notion page, no record. What it leaves behind is ``page.md`` beside the
+    transcript — the editor's own output, in the place the pipeline would read
+    it from — so what a publish would carry can be read before one happens.
+
+    This is the counterpart to ``profile fetch``, which gets a conversation
+    without deciding anything about it. Between them a conversation can be
+    taken through the passes one step at a time, which otherwise needs a sync
+    over whatever the cursor happens to admit.
+    """
+    from forumboard.pipeline import passes
+    from forumboard.store import TRANSCRIPT_FILE, ConversationStore
+
+    if verbose:
+        configure_logging(verbose)
+    notes = (project_root() / settings.notes_path).resolve()
+    store = ConversationStore(notes / "conversations")
+    folder = store.conversation_dir(name, conversation)
+    if not (folder / TRANSCRIPT_FILE).is_file():
+        typer.echo(
+            f"No transcript at {folder} — run `forumboard profile fetch {name} "
+            f"{conversation}` first.",
+            err=True,
+        )
+        raise typer.Exit(1)
+
+    known = store.read_record(name, conversation)
+    heading = title or (known.title if known is not None else "")
+    verdict = asyncio.run(passes.review(heading, folder))
+    typer.echo(f"review: {verdict.describe()}")
+    plan = verdict.plan_for_editor()
+    if plan is None:
+        return
+
+    outcome = asyncio.run(passes.edit(heading, folder, plan))
+    typer.echo(f"edit: {outcome.describe()}")
+    if outcome.publishable() is None:
+        return
+
+    page = store.read_page(name, conversation)
+    if not page:
+        typer.echo(
+            "The editor decided to publish but wrote no page — a sync would "
+            "refuse this rather than publish an empty one.",
+            err=True,
+        )
+        raise typer.Exit(1)
+    report([f"wrote {store.page_path(name, conversation)} — {len(page)} characters"])
+
+
+@profile_app.command()
 def status(name: str) -> None:
     """Show what has been decided about one profile's conversations."""
     from forumboard.store import ConversationStore
