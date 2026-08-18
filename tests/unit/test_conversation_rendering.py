@@ -23,6 +23,7 @@ from forumboard.claudeai.client import (
     ConversationReference,
     rendered_conversation,
 )
+from forumboard.claudeai.probe import PayloadAudit
 from forumboard.pipeline import passes
 from forumboard.store import ConversationStore
 
@@ -70,6 +71,103 @@ def test_a_tool_call_reaches_the_transcript_with_its_arguments() -> None:
     assert "Gmail:search_threads" in rendered
     assert "Gmail" in rendered
     assert "from:someone@example.com" in rendered
+
+
+def test_a_page_the_conversation_pulled_in_is_named_and_addressed() -> None:
+    """A search result is material about somebody who is not in the room.
+
+    It reaches the conversation through a tool and is about whoever the page
+    is about — the third party the sensitivity test names. A result that
+    renders as nothing leaves no sign the conversation ever read it.
+    """
+    payload = conversation(
+        {
+            "sender": "assistant",
+            "content": [
+                {
+                    "type": "knowledge",
+                    "title": "What somebody did last summer",
+                    "url": "https://example.com/a-person",
+                    "metadata": {"site_name": "Example"},
+                }
+            ],
+        }
+    )
+
+    rendered = rendered_conversation("conv-1", payload).markdown
+
+    assert "What somebody did last summer" in rendered
+    assert "https://example.com/a-person" in rendered
+    assert "Example" in rendered
+
+
+def test_a_call_with_no_arguments_says_so_rather_than_null() -> None:
+    """The service sends no arguments for some calls.
+
+    Spelling that ``null`` reads as an argument whose value was null, which is
+    a different claim about what the conversation did.
+    """
+    payload = conversation(
+        {"sender": "assistant", "content": [{"type": "tool_use", "name": "web_fetch"}]}
+    )
+
+    rendered = rendered_conversation("conv-1", payload).markdown
+
+    assert "web_fetch" in rendered
+    assert "null" not in rendered
+
+
+def test_a_tool_result_says_everything_it_came_back_with() -> None:
+    """The service puts what a result says in whichever of three places suits.
+
+    Reading only ``content`` leaves a result that spoke rendering as one that
+    said nothing, and a failure rendering as a silence.
+    """
+    payload = conversation(
+        {
+            "sender": "assistant",
+            "content": [
+                {
+                    "type": "tool_result",
+                    "name": "web_fetch",
+                    "is_error": True,
+                    "message": "the site refused",
+                    "display_content": "what the reader was shown",
+                }
+            ],
+        }
+    )
+
+    rendered = rendered_conversation("conv-1", payload).markdown
+
+    assert "error" in rendered
+    assert "the site refused" in rendered
+    assert "what the reader was shown" in rendered
+
+
+def test_a_file_the_conversation_referred_to_is_named() -> None:
+    """A recording or a document reaches the conversation as a resource.
+
+    It is the same hole an unrendered attachment is: the reviewer decides
+    about material it was never told existed.
+    """
+    payload = conversation(
+        {
+            "sender": "assistant",
+            "content": [
+                {
+                    "type": "local_resource",
+                    "name": "a voice memo",
+                    "file_path": "/mnt/outputs/memo.m4a.txt",
+                }
+            ],
+        }
+    )
+
+    rendered = rendered_conversation("conv-1", payload).markdown
+
+    assert "a voice memo" in rendered
+    assert "/mnt/outputs/memo.m4a.txt" in rendered
 
 
 def test_an_image_says_it_was_there() -> None:
@@ -246,6 +344,51 @@ def test_the_passes_are_told_the_names_the_store_writes(tmp_path: Path) -> None:
     assert store.transcript_path(PROFILE, "conv-1").name in told
     assert store.attachments_dir(PROFILE, "conv-1").name in told
     assert store.page_path(PROFILE, "conv-1").name in passes.where_to_write()
+
+
+def test_the_audit_reports_a_field_nothing_reads() -> None:
+    """``extra="ignore"`` is why an upstream addition arrives as nothing.
+
+    That is deliberate, and it is also the one way material could reach here
+    and be lost with nothing said. The audit is what makes it answerable.
+    """
+    payload = conversation(said("hello", surprise_from_upstream="something"))
+
+    audited = PayloadAudit.over(payload)
+
+    assert "surprise_from_upstream" in audited.dropped
+    assert "sender" in audited.read
+
+
+def test_the_audit_does_not_call_a_rendered_tool_argument_dropped() -> None:
+    """A call's ``input`` is declared as raw JSON and rendered whole.
+
+    Walking into it would report every tool's argument names as lost
+    material, which is the opposite of true.
+    """
+    payload = conversation(
+        {
+            "sender": "assistant",
+            "content": [
+                {"type": "tool_use", "name": "search", "input": {"q": "anything"}}
+            ],
+        }
+    )
+
+    assert "q" not in PayloadAudit.over(payload).dropped
+
+
+def test_the_audit_names_the_kinds_the_renderer_must_handle() -> None:
+    """A kind the renderer does not name falls through to the general case.
+
+    Listing what was actually served is what says whether that fallthrough is
+    a default or a hole.
+    """
+    payload = conversation(
+        {"sender": "assistant", "content": [{"type": "knowledge", "title": "a page"}]}
+    )
+
+    assert "knowledge" in PayloadAudit.over(payload).kinds
 
 
 def test_a_share_link_is_told_from_a_conversation_id_by_its_shape() -> None:
