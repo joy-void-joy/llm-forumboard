@@ -109,6 +109,18 @@ class Settings(BaseSettings, env_file=(".env", ".env.local"), extra="ignore"):
         description="Most conversations one profile contributes per pass",
     )
 
+    sync_seed_conversations: int = Field(
+        default=10,
+        validation_alias="FORUMBOARD_SYNC_SEED_CONVERSATIONS",
+        description=(
+            "Fewest conversations a profile's first pass takes, reached back "
+            "for regardless of age when the lookback window holds fewer. An "
+            "account that has been quiet longer than the window would "
+            "otherwise seed nothing, which reads as a broken sync rather than "
+            "as a quiet fortnight. Zero leaves the window as the only rule."
+        ),
+    )
+
     worldview_interval_seconds: int = Field(
         default=3600,
         validation_alias="FORUMBOARD_WORLDVIEW_INTERVAL_SECONDS",
