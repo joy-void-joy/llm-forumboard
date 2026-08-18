@@ -177,7 +177,7 @@ class Attachment(BaseModel, frozen=True, extra="ignore"):
         return f".{self.file_type}" if self.file_type else ""
 
     def stored_name(self) -> str:
-        """What to call this file on disk.
+        """What to call this file.
 
         Reduced to a single path component: the name is the uploader's, and a
         conversation is not entitled to choose where in the filesystem its
@@ -185,15 +185,31 @@ class Attachment(BaseModel, frozen=True, extra="ignore"):
         one, because a file written under no name is a file nobody can open.
         """
         named = PurePosixPath(self.file_name).name
-        return named or f"{self.id or 'attachment'}{self.extension()}"
+        return named or f"attachment{self.extension()}"
+
+    def relative_path(self) -> PurePosixPath:
+        """Where this file sits under the conversation's attachment directory.
+
+        Each file gets a directory of its own, named by the identifier the
+        service gave it. Two uploads into one conversation can carry the same
+        name — the same ``notes.md`` twice is an ordinary thing to do — and a
+        flat directory would let the second quietly replace the first. The
+        identifier is unique where the name is not, so nesting under it makes
+        that collision impossible rather than merely detectable.
+        """
+        return PurePosixPath(PurePosixPath(self.id).name or "unidentified") / (
+            self.stored_name()
+        )
 
     def label(self) -> str:
         """How this attachment is announced in the transcript.
 
-        The relative path is the point: the passes read the conversation from
-        a directory, and this is what tells them the file is there to open.
+        The path is the point: the passes read the conversation from a
+        directory, and this is what tells them the file is there to open.
         """
-        return f"[Attachment: {self.stored_name()} → attachments/{self.stored_name()}]"
+        return (
+            f"[Attachment: {self.stored_name()} → attachments/{self.relative_path()}]"
+        )
 
 
 class ConversationContent(BaseModel, frozen=True):

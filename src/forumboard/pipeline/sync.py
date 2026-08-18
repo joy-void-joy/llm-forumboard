@@ -182,7 +182,7 @@ class ConversationSync:
             logger.warning("Could not fetch %s: %s", meta.uuid, error)
             return SyncOutcome(profile=profile, failed=1)
 
-        self.store.save_transcript(profile, content.uuid, content.markdown)
+        self.store.save_conversation(profile, content)
         existing = self.store.read_record(profile, content.uuid)
         if existing is not None and existing.updated_at == content.updated_at:
             return SyncOutcome(profile=profile, fetched=1, unchanged=1)

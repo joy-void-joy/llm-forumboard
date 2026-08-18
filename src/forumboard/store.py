@@ -15,6 +15,20 @@ They are unredacted by definition — they are the input to redaction — so the
 never reach a commit, and anyone with the box has them. That is a deliberate
 trade for being able to re-run the editor on old material when a prompt
 improves.
+
+Each conversation is a **folder**, not a file::
+
+    <profile>/transcripts/<conversation-id>/
+        conversation.md
+        attachments/<attachment-id>/<file-name>
+        page.md
+
+because that folder is what the reviewer and the editor are pointed at. They
+read it with a tool rather than being handed it in a prompt, which is the only
+way an uploaded file reaches them at all — a prompt carries text and nothing
+else. The folder is also the boundary: a session that can reach one
+conversation's directory can reach one conversation, which is what makes
+giving those passes a tool safe.
 """
 
 import json
@@ -25,6 +39,7 @@ from pathlib import Path
 from pydantic import BaseModel
 
 from forumboard.agent.models import EditVerdict, ReviewVerdict
+from forumboard.claudeai.client import Attachment, ConversationContent
 
 logger = logging.getLogger(__name__)
 
@@ -85,9 +100,28 @@ class ConversationStore:
         """Where one profile's cache lives."""
         return self.root / profile
 
+    def conversation_dir(self, profile: str, conversation_id: str) -> Path:
+        """The folder one conversation is read from.
+
+        A folder rather than a file, because the passes work inside it. The
+        transcript, the attachments it names, and the page the editor writes
+        are one conversation's worth of material, and a session pointed here
+        can reach exactly that and nothing else — which is what lets the
+        reviewer and the editor hold a tool at all.
+        """
+        return self.profile_dir(profile) / "transcripts" / conversation_id
+
     def transcript_path(self, profile: str, conversation_id: str) -> Path:
         """Where a raw transcript is kept."""
-        return self.profile_dir(profile) / "transcripts" / f"{conversation_id}.md"
+        return self.conversation_dir(profile, conversation_id) / "conversation.md"
+
+    def attachments_dir(self, profile: str, conversation_id: str) -> Path:
+        """Where a conversation's uploaded files are kept."""
+        return self.conversation_dir(profile, conversation_id) / "attachments"
+
+    def page_path(self, profile: str, conversation_id: str) -> Path:
+        """Where the editor writes the page, when it writes one."""
+        return self.conversation_dir(profile, conversation_id) / "page.md"
 
     def record_path(self, profile: str, conversation_id: str) -> Path:
         """Where the decision about a conversation is kept."""
@@ -110,9 +144,40 @@ class ConversationStore:
         path.write_text(markdown)
         return path
 
-    def read_transcript(self, profile: str, conversation_id: str) -> str:
-        """A cached transcript, empty when there is none."""
-        path = self.transcript_path(profile, conversation_id)
+    def save_attachment(
+        self, profile: str, conversation_id: str, attachment: Attachment
+    ) -> Path:
+        """Write one uploaded file where the transcript says it is.
+
+        The attachment decides its own path, so what the transcript tells a
+        reader to open and what is written cannot disagree.
+        """
+        path = (
+            self.attachments_dir(profile, conversation_id) / attachment.relative_path()
+        )
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(attachment.extracted_content)
+        return path
+
+    def save_conversation(self, profile: str, content: ConversationContent) -> Path:
+        """Write a conversation and everything it carried.
+
+        One call, because they are one thing. The attachments go down first:
+        a transcript that exists while the files it names do not would send
+        its reader to something that is not there, and the reader is a pass
+        deciding what may be published.
+        """
+        for attachment in content.attachments:
+            self.save_attachment(profile, content.uuid, attachment)
+        return self.save_transcript(profile, content.uuid, content.markdown)
+
+    def read_page(self, profile: str, conversation_id: str) -> str:
+        """The page the editor wrote, empty where it wrote none.
+
+        Empty is the abort: an editor that refused a conversation leaves no
+        page, and the caller reads that as the refusal it is.
+        """
+        path = self.page_path(profile, conversation_id)
         return path.read_text() if path.is_file() else ""
 
     def save_record(self, record: ConversationRecord) -> None:
