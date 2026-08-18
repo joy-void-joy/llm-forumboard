@@ -319,6 +319,12 @@ class ConversationReference(BaseModel, frozen=True):
             return await client.snapshot(self.value)
         return await client.conversation(self.value)
 
+    async def raw(self, client: "ClaudeWebClient") -> JsonValue:
+        """The same payload, before anything decided what to keep of it."""
+        if self.shared():
+            return await client.snapshot_payload(self.value)
+        return await client.conversation_payload(self.value)
+
     def describe(self) -> str:
         """This reference as one line saying which route it takes."""
         kind = "share link" if self.shared() else "conversation"
@@ -370,6 +376,17 @@ def refusal_detail(response: httpx.Response) -> str:
     return f"session rejected ({inside})" + (f": {message}" if message else "")
 
 
+class BlockMetadata(Payload, frozen=True):
+    """Where a page a conversation pulled in came from."""
+
+    site_name: str = ""
+    site_domain: str = ""
+
+    def describe(self) -> str:
+        """The site as one phrase, empty where it named none."""
+        return self.site_name or self.site_domain
+
+
 class ContentBlock(Payload, frozen=True):
     """One block of a message, in the shapes claude.ai serves them.
 
@@ -390,6 +407,16 @@ class ContentBlock(Payload, frozen=True):
     name: str = ""
     integration_name: str = ""
     input: JsonObject | None = None
+    title: str = ""
+    url: str = ""
+    is_missing: bool = False
+    metadata: BlockMetadata | None = None
+    file_path: str = ""
+    table: JsonValue = None
+    json_block: JsonValue = None
+    is_error: bool = False
+    message: str = ""
+    display_content: JsonValue = None
 
     def call_text(self) -> str:
         """This tool call as text, arguments and all.
@@ -406,18 +433,73 @@ class ContentBlock(Payload, frozen=True):
         cannot forge one.
         """
         via = f" via {self.integration_name}" if self.integration_name else ""
+        called = f"[tool call: {self.name or '(unnamed tool)'}{via}]"
+        if self.input is None:
+            # The service sends no arguments for some calls. Spelling that
+            # "null" would read as an argument whose value was null, which is
+            # a different claim about what the conversation did.
+            return f"{called}\n(the payload carried no arguments for this call)"
         spelled = json.dumps(self.input, indent=2, ensure_ascii=False, default=str)
-        return f"[tool call: {self.name or '(unnamed tool)'}{via}]\n{spelled}"
+        return f"{called}\n{spelled}"
+
+    def fetched_text(self) -> str:
+        """One page the conversation pulled in, by title and address.
+
+        A search result is material from outside the conversation, about
+        whoever the page is about — the third party the sensitivity test names,
+        who is not present and did not choose to be discussed. A reviewer that
+        cannot see which pages were read cannot redact what they brought in,
+        and a page that rendered as nothing leaves no sign it was ever there.
+        """
+        site = self.metadata.describe() if self.metadata is not None else ""
+        where = " — ".join(part for part in (self.url, site) if part)
+        missing = " (not retrieved)" if self.is_missing else ""
+        titled = f"[web result: {self.title or '(untitled)'}{missing}]"
+        return f"{titled}\n{where}" if where else titled
+
+    def resource_text(self) -> str:
+        """A file the conversation referred to, named where it sat."""
+        where = f" — {self.file_path}" if self.file_path else ""
+        return f"[file: {self.name or '(unnamed)'}{where}]"
+
+    def structured_text(self) -> str:
+        """A block whose content is data rather than prose.
+
+        Re-encoded rather than pasted, for the reason ``call_text`` gives: a
+        value holding this transcript's own speaker tags cannot forge one.
+        """
+        held = self.table if self.table is not None else self.json_block
+        spelled = json.dumps(held, indent=2, ensure_ascii=False, default=str)
+        return f"[{self.type}]\n{spelled}"
 
     def nested(self) -> str:
-        """The blocks a tool result holds, or the string it holds instead."""
+        """Everything a tool result came back with.
+
+        The service puts what a result says in whichever of three places
+        suits it — ``content``, ``display_content``, or a bare ``message`` —
+        and reading only the first leaves a result that spoke rendering as a
+        result that said nothing. Whether it failed is kept too: a reviewer
+        weighing what a call brought back should not have to guess that it
+        brought back nothing because it errored.
+        """
         match self.content:
-            case str():
-                return self.content
+            case str() as held:
+                body = held
             case blocks:
-                return "\n\n".join(
+                body = "\n\n".join(
                     text for block in blocks if (text := block.text_payload())
                 )
+        shown = (
+            self.display_content
+            if isinstance(self.display_content, str)
+            else json.dumps(
+                self.display_content, indent=2, ensure_ascii=False, default=str
+            )
+            if self.display_content is not None
+            else ""
+        )
+        failed = "[the tool reported an error]" if self.is_error else ""
+        return "\n\n".join(part for part in (failed, body, self.message, shown) if part)
 
     def text_payload(self) -> str:
         """What this block says, empty where it says nothing.
@@ -434,6 +516,12 @@ class ContentBlock(Payload, frozen=True):
                 return self.call_text()
             case "tool_result":
                 return self.nested()
+            case "knowledge":
+                return self.fetched_text()
+            case "local_resource":
+                return self.resource_text()
+            case "table" | "json_block":
+                return self.structured_text()
             case _:
                 inline = self.content if isinstance(self.content, str) else ""
                 return next(
@@ -802,10 +890,18 @@ class ClaudeWebClient:
 
         return list(recent())
 
+    async def conversation_payload(self, uuid: str) -> JsonValue:
+        """One conversation exactly as the service sent it.
+
+        Separate from :meth:`conversation` so what arrived can be examined
+        without going through the models that decide what to keep of it —
+        which is the only way to see what they drop.
+        """
+        return await self.fetch(ConversationDetail(uuid=uuid))
+
     async def conversation(self, uuid: str) -> ConversationContent:
         """One conversation, every message, as Markdown."""
-        payload = await self.fetch(ConversationDetail(uuid=uuid))
-        return rendered_conversation(uuid, payload)
+        return rendered_conversation(uuid, await self.conversation_payload(uuid))
 
     async def public_snapshot(self, share: str) -> JsonValue | None:
         """A share link as anyone holding it sees it, or nothing where the
@@ -824,6 +920,13 @@ class ClaudeWebClient:
         return response.json()
 
     async def snapshot(self, share: str) -> ConversationContent:
+        """A shared conversation, rendered."""
+        identifier = share_id(share)
+        return rendered_conversation(
+            identifier, await self.snapshot_payload(identifier)
+        )
+
+    async def snapshot_payload(self, share: str) -> JsonValue:
         """A conversation from a share link or a bare share id.
 
         Anonymously first, because a link that needs no session should not
@@ -838,7 +941,7 @@ class ClaudeWebClient:
         """
         identifier = share_id(share)
         if (public := await self.public_snapshot(identifier)) is not None:
-            return rendered_conversation(identifier, public)
+            return public
 
         request = SnapshotDetail(share=identifier)
         refused: ClaudeWebError | None = None
@@ -853,11 +956,11 @@ class ClaudeWebClient:
                 refused = error
                 continue
             # Outside the guard on purpose. Only a refusal means "ask the next
-            # organisation"; a payload that arrived and would not render is
-            # this snapshot's problem wherever it came from, and swallowing it
+            # organisation" — anything else this payload turns out to be wrong
+            # about is its own problem wherever it came from, and continuing
             # here would report the last organisation's refusal for a snapshot
             # the first one served.
-            return rendered_conversation(identifier, served)
+            return served
         raise refused or ClaudeWebError(
             f"no organisation on this account serves snapshot {identifier}"
         )
