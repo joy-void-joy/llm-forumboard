@@ -289,6 +289,29 @@ def withdraw(name: str) -> None:
 
 
 @profile_app.command()
+def probe(name: str) -> None:
+    """Ask claude.ai what one profile can see, and what a sync would keep.
+
+    Reads only — it lists the account's organisations and the conversations
+    under each, and touches neither the cursor nor Notion. This is what tells
+    a "nothing new" apart: an expired session, an organisation that holds no
+    conversations, and a listing the freshness floor filtered all say it.
+    """
+    from forumboard.claudeai.probe import probe_profile
+    from forumboard.store import ConversationStore
+
+    notes = (project_root() / settings.notes_path).resolve()
+    probed = asyncio.run(
+        probe_profile(
+            profiles_root=profiles_root(),
+            store=ConversationStore(notes / "conversations"),
+            profile=name,
+        )
+    )
+    report(probed.lines())
+
+
+@profile_app.command()
 def status(name: str) -> None:
     """Show what has been decided about one profile's conversations."""
     from forumboard.store import ConversationStore
