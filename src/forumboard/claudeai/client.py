@@ -35,7 +35,7 @@ from pathlib import PurePosixPath
 from urllib.parse import urlparse
 
 import httpx
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, ValidationError, model_validator
 
 from lup.types import JsonObject, JsonValue, StringMap
 
@@ -102,7 +102,30 @@ class StaticCredentials(CredentialSource):
         return self.value
 
 
-class OrganizationEntry(BaseModel, frozen=True, extra="ignore"):
+class Payload(BaseModel, frozen=True, extra="ignore"):
+    """A model over what the service sends.
+
+    An absent field and a null one mean the same thing here, and the service
+    spells "nothing" both ways within a single payload: one message omits
+    ``compaction_summary`` while the next sends it as null, and a snapshot
+    sends nulls a conversation does not. A model that accepted only the
+    omission would reject a whole conversation over the way one message said
+    nothing — and the rejection would look like the organisation refusing to
+    serve it, which is a long way from the truth.
+
+    So nulls are dropped and each field's own default answers instead.
+    """
+
+    @model_validator(mode="before")
+    @classmethod
+    def absent_where_null(cls, data: JsonValue) -> JsonValue:
+        """Treat a null the service sent as a field it did not send."""
+        if not isinstance(data, dict):
+            return data
+        return {key: value for key, value in data.items() if value is not None}
+
+
+class OrganizationEntry(Payload, frozen=True):
     """One organisation the account belongs to."""
 
     uuid: str
@@ -119,7 +142,7 @@ class OrganizationEntry(BaseModel, frozen=True, extra="ignore"):
         return f"{self.uuid} {self.name or '(unnamed)'} — {capability}"
 
 
-class ConversationMeta(BaseModel, extra="ignore"):
+class ConversationMeta(Payload, frozen=True):
     """A conversation as the listing describes it — no messages."""
 
     uuid: str
@@ -145,7 +168,7 @@ class ConversationMeta(BaseModel, extra="ignore"):
         return sorted(metas, key=lambda meta: meta.updated() or epoch, reverse=True)
 
 
-class Attachment(BaseModel, frozen=True, extra="ignore"):
+class Attachment(Payload, frozen=True):
     """One file uploaded into a conversation.
 
     claude.ai extracts a text document when it is uploaded and serves the
@@ -273,25 +296,54 @@ def share_id(share: str) -> str:
     return path.name or share
 
 
+class ConversationReference(BaseModel, frozen=True):
+    """What somebody named: a conversation of the account, or a shared link.
+
+    Which of the two it is, is read from the reference's own shape rather
+    than taken from a flag. Whoever pastes a link should not also have to say
+    what kind of thing they pasted, and the two are told apart by the
+    ``share`` segment a share URL carries — with or without a scheme, since a
+    link copied out of a browser's address bar often arrives without one.
+    """
+
+    value: str
+
+    def shared(self) -> bool:
+        """Whether this names a shared snapshot rather than a conversation."""
+        located = urlparse(self.value)
+        return "share" in PurePosixPath(located.path or self.value).parts
+
+    async def fetch(self, client: "ClaudeWebClient") -> ConversationContent:
+        """The conversation this names, by whichever route serves it."""
+        if self.shared():
+            return await client.snapshot(self.value)
+        return await client.conversation(self.value)
+
+    def describe(self) -> str:
+        """This reference as one line saying which route it takes."""
+        kind = "share link" if self.shared() else "conversation"
+        return f"{kind} {share_id(self.value) if self.shared() else self.value}"
+
+
 def has_text(value: JsonValue) -> bool:
     """Whether a value is a string holding something other than whitespace."""
     return isinstance(value, str) and bool(value) and not value.isspace()
 
 
-class RefusalDetails(BaseModel, frozen=True, extra="ignore"):
+class RefusalDetails(Payload, frozen=True):
     """The machine-readable half of a rejection."""
 
     error_code: str = ""
 
 
-class Refusal(BaseModel, frozen=True, extra="ignore"):
+class Refusal(Payload, frozen=True):
     """What the service said about why it refused."""
 
     message: str = ""
     details: RefusalDetails = RefusalDetails()
 
 
-class RefusalBody(BaseModel, frozen=True, extra="ignore"):
+class RefusalBody(Payload, frozen=True):
     """A rejection envelope, which nests its reason one level down."""
 
     error: Refusal = Refusal()
@@ -318,7 +370,7 @@ def refusal_detail(response: httpx.Response) -> str:
     return f"session rejected ({inside})" + (f": {message}" if message else "")
 
 
-class ContentBlock(BaseModel, frozen=True, extra="ignore"):
+class ContentBlock(Payload, frozen=True):
     """One block of a message, in the shapes claude.ai serves them.
 
     ``content`` is the recursive field: a tool result holds blocks of its own
@@ -389,7 +441,7 @@ class ContentBlock(BaseModel, frozen=True, extra="ignore"):
                 )
 
 
-class Message(BaseModel, frozen=True, extra="ignore"):
+class Message(Payload, frozen=True):
     """One turn of a conversation, with everything it carried."""
 
     uuid: str = ""
@@ -465,7 +517,7 @@ class Message(BaseModel, frozen=True, extra="ignore"):
         return f"<{speaker}>\n{body}\n</{speaker}>"
 
 
-class ConversationPayload(BaseModel, frozen=True, extra="ignore"):
+class ConversationPayload(Payload, frozen=True):
     """A conversation or a shared snapshot, as the service serves either.
 
     One model for both. A snapshot titles itself ``snapshot_name`` and carries
@@ -795,10 +847,17 @@ class ClaudeWebClient:
                 self.source, timeout=self.timeout, organization=entry.uuid
             )
             try:
-                return rendered_conversation(identifier, await pinned.fetch(request))
+                served = await pinned.fetch(request)
             except ClaudeWebError as error:
                 logger.debug("%s does not serve snapshot %s", entry.uuid, identifier)
                 refused = error
+                continue
+            # Outside the guard on purpose. Only a refusal means "ask the next
+            # organisation"; a payload that arrived and would not render is
+            # this snapshot's problem wherever it came from, and swallowing it
+            # here would report the last organisation's refusal for a snapshot
+            # the first one served.
+            return rendered_conversation(identifier, served)
         raise refused or ClaudeWebError(
             f"no organisation on this account serves snapshot {identifier}"
         )
