@@ -96,11 +96,17 @@ class OrganizationEntry(BaseModel, frozen=True, extra="ignore"):
     """One organisation the account belongs to."""
 
     uuid: str
+    name: str = ""
     capabilities: list[str] = []
 
     def chat_capable(self) -> bool:
         """Whether conversations can be read under it."""
         return "chat" in self.capabilities
+
+    def describe(self) -> str:
+        """This organisation as one line an operator can tell apart."""
+        capability = "chat" if self.chat_capable() else "no chat capability"
+        return f"{self.uuid} {self.name or '(unnamed)'} — {capability}"
 
 
 class ConversationMeta(BaseModel, extra="ignore"):
@@ -370,8 +376,10 @@ class ClaudeWebClient:
             raise SessionExpired("no claude.ai session available for this profile")
         return cookie_header(credentials.cookie)
 
-    async def organizations(self, client: httpx.AsyncClient, cookie: str) -> list[str]:
-        """Organisation ids, chat-capable first."""
+    async def organization_entries(
+        self, client: httpx.AsyncClient, cookie: str
+    ) -> list[OrganizationEntry]:
+        """Every organisation the account belongs to, as the service lists them."""
         response = await client.request(
             "GET", f"{BASE_URL}/api/organizations", headers=self.headers(cookie)
         )
@@ -392,10 +400,26 @@ class ClaudeWebClient:
                 except ValidationError:
                     logger.debug("skipping an unreadable organization entry")
 
-        known = list(parsed())
+        return list(parsed())
+
+    async def organizations(self, client: httpx.AsyncClient, cookie: str) -> list[str]:
+        """Organisation ids, chat-capable first."""
+        known = await self.organization_entries(client, cookie)
         return [entry.uuid for entry in known if entry.chat_capable()] + [
             entry.uuid for entry in known if not entry.chat_capable()
         ]
+
+    async def account_organizations(self) -> list[OrganizationEntry]:
+        """Every organisation this profile's session can see.
+
+        Opens its own transport, for a caller that wants the account's shape
+        rather than a conversation — which is what tells an operator whether
+        the organisation a sync reads under is the one holding the chats.
+        """
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            return await self.organization_entries(
+                client, await self.session(refresh=False)
+            )
 
     async def resolve_organization(self, client: httpx.AsyncClient, cookie: str) -> str:
         """The organisation to read under, preferring a chat-capable one."""
@@ -407,6 +431,16 @@ class ClaudeWebClient:
         hint = organization_hint(cookie)
         self.organization = hint if hint in available else available[0]
         return self.organization
+
+    async def reading_organization(self) -> str:
+        """The organisation a fetch through this client would read under.
+
+        Resolves exactly as :meth:`fetch` does rather than restating the rule,
+        so what a diagnostic reports and what a pass reads cannot disagree.
+        """
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            cookie = await self.session(refresh=False)
+            return await self.resolve_organization(client, cookie)
 
     async def fetch(self, request: PathBuilder) -> JsonValue:
         """GET an organisation-scoped endpoint, refreshing the session once.
