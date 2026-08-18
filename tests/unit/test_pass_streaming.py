@@ -96,6 +96,16 @@ async def test_each_block_prints_once(capsys: pytest.CaptureFixture[str]) -> Non
 
 
 @pytest.mark.asyncio
+async def test_a_labelled_pass_says_which_one_it_is(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The daemon has a sync and a briefing mid-turn together; the margin says."""
+    async with streaming_blocks(Spoken("weighing it"), "review"):
+        pass
+    assert "review" in capsys.readouterr().out
+
+
+@pytest.mark.asyncio
 async def test_a_run_told_not_to_stream_stays_silent(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

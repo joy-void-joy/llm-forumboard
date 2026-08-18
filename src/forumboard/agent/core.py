@@ -562,7 +562,9 @@ def build_auxiliary_factory(
 
 
 @asynccontextmanager
-async def streaming_blocks(events: EventStream | None) -> AsyncGenerator[None]:
+async def streaming_blocks(
+    events: EventStream | None, label: str = ""
+) -> AsyncGenerator[None]:
     """Print a turn's blocks as it produces them, for the duration of a turn.
 
     The tool-less passes reach ``decorate_factory`` without the notes and
@@ -575,6 +577,10 @@ async def streaming_blocks(events: EventStream | None) -> AsyncGenerator[None]:
     ``events()`` rather than ``live()``: the durable view arrives a completed
     block at a time, which is the granularity a reader follows, where deltas
     would be a character stream nobody watches.
+
+    ``label`` names the pass in the margin. The daemon runs its loops in one
+    task group, so a sync and a briefing can be mid-turn together, and two
+    unnamed streams interleaved read as one confused pass.
     """
     if events is None or not settings.stream_agent_blocks:
         yield
@@ -582,13 +588,14 @@ async def streaming_blocks(events: EventStream | None) -> AsyncGenerator[None]:
     from lup.telemetry.display import ColorAssigner, print_block
 
     colors = ColorAssigner()
+    margin = f"{label} " if label else ""
 
     async def consume() -> None:
         async for event in events.events():
             if (message := event.completed_message) is None:
                 continue
             for block in message.blocks:
-                print_block(block.telemetry_block, colors=colors)
+                print_block(block.telemetry_block, margin, colors=colors)
 
     printing = asyncio.create_task(consume())
     try:
@@ -610,6 +617,7 @@ async def run_structured[T: BaseModel](
     output: type[T],
     model: str | None = None,
     max_turns: int | None = None,
+    label: str = "",
 ) -> T:
     """One tool-less query that has to answer in ``output``'s shape.
 
@@ -625,7 +633,7 @@ async def run_structured[T: BaseModel](
     )
     async with factory.open() as handle:
         turn = await handle.session.start(turn_request(task, output))
-        async with streaming_blocks(turn.events):
+        async with streaming_blocks(turn.events, label):
             result = await turn.turn.result()
     if result.output is None:
         raise ValueError(
