@@ -13,6 +13,7 @@ they said.
 
 import asyncio
 import logging
+from collections import Counter
 from pathlib import Path
 from typing import Annotated
 
@@ -448,6 +449,56 @@ def decide(
         )
         raise typer.Exit(1)
     report([f"wrote {store.page_path(name, conversation)} — {len(page)} characters"])
+
+
+@profile_app.command()
+def audit(
+    name: str,
+    conversation: Annotated[
+        str,
+        typer.Argument(
+            help="A conversation id, or a claude.ai/share/... link", metavar="REFERENCE"
+        ),
+    ],
+    kind: Annotated[
+        str,
+        typer.Option(help="Report the fields carried by blocks of this kind instead"),
+    ] = "",
+) -> None:
+    """Report what a fetch reads of a conversation, and what it drops.
+
+    The payload models ignore fields they do not declare, so an upstream
+    addition arrives as nothing rather than as an error. That is what stops
+    one new key rejecting a whole conversation, and it is also how material
+    could reach here and be lost with nothing said. This says which fields
+    are in which set, for one real conversation.
+
+    Reads only, and writes nothing at all — not even the transcript.
+    """
+    from forumboard.claudeai.browser import ProfileCredentials, context_dir
+    from forumboard.claudeai.client import (
+        ClaudeWebClient,
+        ClaudeWebError,
+        ConversationReference,
+    )
+    from forumboard.claudeai.probe import PayloadAudit
+
+    reference = ConversationReference(value=conversation)
+    client = ClaudeWebClient(ProfileCredentials(context_dir(profiles_root(), name)))
+    try:
+        payload = asyncio.run(reference.raw(client))
+    except ClaudeWebError as error:
+        typer.echo(f"Could not read {reference.describe()}: {error}", err=True)
+        raise typer.Exit(1) from error
+
+    if kind:
+        carried = Counter(PayloadAudit.fields_on(payload, kind))
+        report(
+            [f"{kind} blocks carry:"]
+            + [f"  {field} ×{count}" for field, count in sorted(carried.items())]
+        )
+        return
+    report(PayloadAudit.over(payload).lines())
 
 
 @profile_app.command()
