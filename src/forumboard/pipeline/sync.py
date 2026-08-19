@@ -152,7 +152,7 @@ class ConversationSync:
             )
 
         if self.dry_run:
-            named = ", ".join(f"{meta.uuid[:8]} {meta.name[:40]!r}" for meta in metas)
+            named = ", ".join(f"{meta.uuid[:8]} {meta.name!r}" for meta in metas)
             return SyncOutcome(
                 profile=profile, note=f"would read {len(metas)}: {named}"
             )
@@ -187,7 +187,7 @@ class ConversationSync:
             logger.warning("Could not fetch %s: %s", meta.uuid, error)
             return SyncOutcome(profile=profile, failed=1)
 
-        self.store.save_transcript(profile, content.uuid, content.markdown)
+        self.store.save_conversation(profile, content)
         existing = self.store.read_record(profile, content.uuid)
         if existing is not None and existing.updated_at == content.updated_at:
             return SyncOutcome(profile=profile, fetched=1, unchanged=1)
@@ -200,7 +200,8 @@ class ConversationSync:
 
     async def decide(self, profile: str, content: ConversationContent) -> SyncOutcome:
         """Review, edit, and publish one conversation — or stop at either gate."""
-        verdict = await passes.review(content.name, content.markdown)
+        folder = self.store.conversation_dir(profile, content.uuid)
+        verdict = await passes.review(content.name, folder)
         plan = verdict.plan_for_editor()
         now = datetime.now(timezone.utc)
         record = ConversationRecord(
@@ -217,13 +218,24 @@ class ConversationSync:
             logger.info("%s", record.describe())
             return SyncOutcome(profile=profile, fetched=1, skipped=1)
 
-        outcome = await passes.edit(content.name, content.markdown, plan)
+        outcome = await passes.edit(content.name, folder, plan)
         published = outcome.publishable()
         record = record.model_copy(update={"edit": outcome})
         if published is None:
             self.store.save_record(record)
             logger.info("%s", record.describe())
             return SyncOutcome(profile=profile, fetched=1, skipped=1)
+
+        # An editor that meant to publish wrote a page; an empty one is the
+        # decision and the deliverable disagreeing, and publishing the empty
+        # side would put a page with no conversation in it where a reader
+        # expects the conversation. Nothing is written and the next pass
+        # tries again.
+        edited = self.store.read_page(profile, content.uuid)
+        if not edited:
+            raise ValueError(
+                f"the editor decided to publish {content.uuid} but wrote no page"
+            )
 
         people = self.context.people.resolve(published.attention)
         page = await self.context.discussions.write(
@@ -233,6 +245,7 @@ class ConversationSync:
                 started=content.started(),
                 updated=content.updated(),
                 published=published,
+                transcript=edited,
                 people=people,
             ),
             now,

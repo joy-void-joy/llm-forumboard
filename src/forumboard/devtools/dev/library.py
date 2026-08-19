@@ -603,11 +603,7 @@ def probe_release(
     that sends a new project to the repository rather than to nothing.
     """
     try:
-        response = (
-            httpx.get(  # lup: ignore[dict-get] — httpx's GET verb, not a dict read
-                url, timeout=timeout, follow_redirects=True
-            )
-        )
+        response = httpx.request("GET", url, timeout=timeout, follow_redirects=True)
     except httpx.HTTPError as error:
         return ReleaseProbe(unreachable=f"{type(error).__name__}: {error}")
     if response.status_code == httpx.codes.NOT_FOUND:

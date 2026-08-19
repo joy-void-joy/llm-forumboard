@@ -46,6 +46,13 @@ class DiscussionRecord(BaseModel, frozen=True):
     started: datetime | None = None
     updated: datetime | None = None
     published: PublishedDiscussion
+    transcript: str = ""
+    """The edited conversation, as the editor wrote it to its page file.
+
+    Carried beside the decision rather than inside it: the editor answers
+    with what a database column holds and writes the body to disk, because a
+    page is as long as its conversation and an answer is as long as one
+    reply."""
     people: ResolvedPeople = ResolvedPeople()
 
     def page_properties(self, now: datetime) -> JsonObject:
@@ -79,7 +86,7 @@ class DiscussionRecord(BaseModel, frozen=True):
         """
         points = "\n".join(f"- {point}" for point in self.published.keypoints)
         heading = f"## Key points\n\n{points}\n\n---\n\n" if points else ""
-        return f"{heading}{self.published.transcript}"
+        return f"{heading}{self.transcript}"
 
 
 class BriefingRecord(BaseModel, frozen=True):

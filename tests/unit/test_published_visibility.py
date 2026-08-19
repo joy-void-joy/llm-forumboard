@@ -52,7 +52,7 @@ def test_a_record_carries_its_page_to_the_status_listing() -> None:
         title="A discussion",
         reviewed_at=NOW,
         review=SkipReview(reason="unused here"),
-        edit=PublishedDiscussion(title="A discussion", transcript="text"),
+        edit=PublishedDiscussion(title="A discussion"),
         page_id="3c07a4cd",
         page_url=WHERE,
     )

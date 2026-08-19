@@ -13,6 +13,7 @@ they said.
 
 import asyncio
 import logging
+from collections import Counter
 from pathlib import Path
 from typing import Annotated
 
@@ -358,6 +359,184 @@ def probe(name: str) -> None:
         )
     )
     report(probed.lines())
+
+
+@profile_app.command()
+def fetch(
+    name: str,
+    conversation: Annotated[
+        str,
+        typer.Argument(
+            help="A conversation id, or a claude.ai/share/... link", metavar="REFERENCE"
+        ),
+    ],
+    verbose: VerboseOption = False,
+) -> None:
+    """Fetch one conversation into its folder, deciding nothing about it.
+
+    Reads only: it writes the transcript and the files it names, and touches
+    neither the cursor, nor the records, nor Notion. A sync is how a
+    conversation gets judged; this is how one gets looked at, which until now
+    could only be done by running the whole pipeline over whatever the cursor
+    happened to admit.
+
+    A share link is accepted wherever a conversation id is, so a conversation
+    somebody sent you can be read without it being in this account.
+
+    It writes into the same folder a sync reads, so what a pass would see is
+    exactly what lands here.
+    """
+    from forumboard.claudeai.browser import ProfileCredentials, context_dir
+    from forumboard.claudeai.client import (
+        ClaudeWebError,
+        ClaudeWebClient,
+        ConversationReference,
+    )
+    from forumboard.store import ConversationStore
+
+    if verbose:
+        configure_logging(verbose)
+    notes = (project_root() / settings.notes_path).resolve()
+    store = ConversationStore(notes / "conversations")
+    reference = ConversationReference(value=conversation)
+    client = ClaudeWebClient(ProfileCredentials(context_dir(profiles_root(), name)))
+    try:
+        content = asyncio.run(reference.fetch(client))
+    except ClaudeWebError as error:
+        typer.echo(f"Could not read {reference.describe()}: {error}", err=True)
+        raise typer.Exit(1) from error
+
+    store.save_conversation(name, content)
+    report(
+        [
+            f"{content.name or '(untitled)'} — {content.message_count} messages",
+            f"wrote {store.conversation_dir(name, content.uuid)}",
+            *[
+                f"  attachments/{attachment.relative_path()}"
+                for attachment in content.attachments
+            ],
+        ]
+    )
+
+
+@profile_app.command()
+def decide(
+    name: str,
+    conversation: Annotated[
+        str,
+        typer.Argument(
+            help="A conversation id already fetched into its folder",
+            metavar="CONVERSATION_ID",
+        ),
+    ],
+    title: Annotated[
+        str,
+        typer.Option(
+            help="The title, where no record from an earlier pass carries one"
+        ),
+    ] = "",
+    verbose: VerboseOption = False,
+) -> None:
+    """Review and edit one fetched conversation, publishing nothing.
+
+    The two model passes and nothing around them: no listing, no cursor, no
+    Notion page, no record. What it leaves behind is ``page.md`` beside the
+    transcript — the editor's own output, in the place the pipeline would read
+    it from — so what a publish would carry can be read before one happens.
+
+    This is the counterpart to ``profile fetch``, which gets a conversation
+    without deciding anything about it. Between them a conversation can be
+    taken through the passes one step at a time, which otherwise needs a sync
+    over whatever the cursor happens to admit.
+    """
+    from forumboard.pipeline import passes
+    from forumboard.store import TRANSCRIPT_FILE, ConversationStore
+
+    if verbose:
+        configure_logging(verbose)
+    notes = (project_root() / settings.notes_path).resolve()
+    store = ConversationStore(notes / "conversations")
+    folder = store.conversation_dir(name, conversation)
+    if not (folder / TRANSCRIPT_FILE).is_file():
+        typer.echo(
+            f"No transcript at {folder} — run `forumboard profile fetch {name} "
+            f"{conversation}` first.",
+            err=True,
+        )
+        raise typer.Exit(1)
+
+    known = store.read_record(name, conversation)
+    heading = title or (known.title if known is not None else "")
+    verdict = asyncio.run(passes.review(heading, folder))
+    typer.echo(f"review: {verdict.describe()}")
+    plan = verdict.plan_for_editor()
+    if plan is None:
+        return
+
+    outcome = asyncio.run(passes.edit(heading, folder, plan))
+    typer.echo(f"edit: {outcome.describe()}")
+    if outcome.publishable() is None:
+        return
+
+    page = store.read_page(name, conversation)
+    if not page:
+        typer.echo(
+            "The editor decided to publish but wrote no page — a sync would "
+            "refuse this rather than publish an empty one.",
+            err=True,
+        )
+        raise typer.Exit(1)
+    report([f"wrote {store.page_path(name, conversation)} — {len(page)} characters"])
+
+
+@profile_app.command()
+def audit(
+    name: str,
+    conversation: Annotated[
+        str,
+        typer.Argument(
+            help="A conversation id, or a claude.ai/share/... link", metavar="REFERENCE"
+        ),
+    ],
+    kind: Annotated[
+        str,
+        typer.Option(help="Report the fields carried by blocks of this kind instead"),
+    ] = "",
+) -> None:
+    """Report what a fetch reads of a conversation, and what it drops.
+
+    The payload models ignore fields they do not declare, so an upstream
+    addition arrives as nothing rather than as an error. That is what stops
+    one new key rejecting a whole conversation, and it is also how material
+    could reach here and be lost with nothing said. This says which fields
+    are in which set, for one real conversation.
+
+    Reads only, and writes nothing at all — not even the transcript.
+    """
+    from forumboard.claudeai.browser import ProfileCredentials, context_dir
+    from forumboard.claudeai.client import (
+        ClaudeWebClient,
+        ClaudeWebError,
+        ConversationReference,
+    )
+    from forumboard.claudeai.probe import PayloadAudit
+
+    reference = ConversationReference(value=conversation)
+    client = ClaudeWebClient(ProfileCredentials(context_dir(profiles_root(), name)))
+    try:
+        payload = asyncio.run(reference.raw(client))
+    except ClaudeWebError as error:
+        typer.echo(f"Could not read {reference.describe()}: {error}", err=True)
+        raise typer.Exit(1) from error
+
+    if kind:
+        carried = Counter(PayloadAudit.fields_on(payload, kind))
+        report(
+            [f"{kind} blocks carry:"]
+            + [f"  {field} ×{count}" for field, count in sorted(carried.items())]
+        )
+        return
+    report(PayloadAudit.over(payload).lines())
 
 
 @profile_app.command()

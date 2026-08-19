@@ -158,7 +158,13 @@ class AbortEdit(EditOutcome):
 
 
 class PublishedDiscussion(EditOutcome):
-    """The page as it will be written, keypoints and all."""
+    """The decision to publish, and everything about the page except its body.
+
+    The body is not here because the editor writes it to a file. A page is as
+    long as the conversation it edits, and a field in a structured answer is
+    as long as one reply — so a long conversation would have come back cut,
+    and a cut page reads exactly like a complete one.
+    """
 
     decision: Literal["publish"] = "publish"
     title: str = Field(description="Title for the page")
@@ -168,15 +174,6 @@ class PublishedDiscussion(EditOutcome):
             "What a reader skimming the database should take away. These are "
             "published; the reviewer's plan is not."
         ),
-    )
-    transcript: str = Field(
-        description=(
-            "The conversation in Markdown, edited for flow and coherence, with "
-            "every redacted passage removed outright. Never leave a marker "
-            "where something was taken out — no [REDACTED], no ellipsis, no "
-            "note. The text must read as though the removed part was never "
-            "said."
-        )
     )
     topics: list[str] = Field(
         default=[], description="Topics this belongs to, for the worldview to pick up"
@@ -213,27 +210,6 @@ class EditResult(BaseModel):
     """The editor's outcome, under an object root."""
 
     outcome: EditVerdict
-
-
-class ChunkEdit(BaseModel):
-    """One span of a transcript too long to edit in a single pass.
-
-    Only the text and the count: the keypoints, topics, and people are decided
-    once over the whole edited transcript, because a chunk cannot see what the
-    conversation was about.
-    """
-
-    transcript: str = Field(description="This span, edited, with removals taken out")
-    redactions_made: int = Field(
-        default=0, description="Passages removed from this span"
-    )
-    carry_forward: str = Field(
-        default="",
-        description=(
-            "What the next span needs to know to stay coherent — who is "
-            "speaking, what was just established, what was already removed."
-        ),
-    )
 
 
 class TopicRewrite(BaseModel):

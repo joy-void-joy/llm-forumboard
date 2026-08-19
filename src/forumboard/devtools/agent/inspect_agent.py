@@ -220,6 +220,8 @@ def run_inspect(as_json: bool, full: bool) -> None:
         out.write(prompt + "\n")
     else:
         out.write(
+            # lup: ignore[silent-truncation] — a preview whose full copy is one
+            # flag away, and the line says which flag reaches it
             f"{prompt[:500]}... ({len(prompt)} chars total, use --full to see all)\n"
         )
 

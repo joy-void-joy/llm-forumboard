@@ -89,12 +89,26 @@ def test_readonly_command_exits_cleanly(args: list[str]) -> None:
 
 
 class FakeGh:
+    """A stand-in for lup's `gh`, which both runs a command and reads a value.
+
+    The two are kept apart the way the command itself keeps them: `calls`
+    records what was run, `reads` what was asked for its output. A read
+    recorded as a call would put `gh pr view` where a test looks for the
+    merge, which is the one thing these assertions are about.
+    """
+
     def __init__(self) -> None:
         self.calls: list[tuple[str, ...]] = []
+        self.reads: list[tuple[str, ...]] = []
 
     def __call__(self, *args: str) -> str:
         self.calls.append(args)
         return ""
+
+    def out(self, *args: str) -> str:
+        """An empty JSON object: every field a caller reads takes its default."""
+        self.reads.append(args)
+        return "{}"
 
 
 def raise_typer_exit() -> Path:

@@ -25,6 +25,16 @@ The conversation is tagged <user> and <claude>. Only the <user> turns were
 written by a person; the <claude> turns are a model's. Both can carry sensitive
 material, because the model quotes and reasons about whatever it was told.""",
         ),
+        Prompt(
+            name="reviewer-sources",
+            text="""\
+You read it from files rather than being handed it, and reading all of it is
+part of the job. A conversation carries more than its prose: tool calls with
+the arguments they were made with, and files somebody attached. A search over
+a mailbox, a document, a screenshot — these are where the material you are
+looking for most often is, and an attachment you did not open is a judgement
+you did not make.""",
+        ),
         AUDIENCE,
         Prompt(
             name="reviewer-whether",

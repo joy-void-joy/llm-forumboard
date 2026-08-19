@@ -61,10 +61,20 @@ it in one direction: you may remove more, and you may refuse outright.""",
             text="""\
 ## What you produce
 
+You read the conversation from files and write the page to one. Read all of
+it first, including every attachment it names — an attachment you did not
+open is a judgement you did not make, and the reviewer before you was reading
+to decide, where you are reading to rewrite.
+
 Rewrite the conversation in Markdown, lightly. "Lightly" means: fix flow, cut
 the dead ends the plan names, tighten repetition, keep the shape of an
 exchange between a person and a model. It does not mean summarise. Somebody
-reading the page should be reading the conversation, not a report about it.""",
+reading the page should be reading the conversation, not a report about it.
+
+Write the whole page. It is a file, not an answer, so there is no length you
+have to fit inside and no reason to stop early — and a page that stops early
+looks exactly like a page that was finished, which is the one failure nobody
+downstream can detect.""",
         ),
         REDACTION_CONTRACT,
         Prompt(

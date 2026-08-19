@@ -6,6 +6,14 @@ settings: a :class:`CredentialSource` supplies the session cookie and can be
 asked to produce a fresh one, which is what lets a profile back its session
 with a stored browser context without this module knowing browsers exist.
 
+What arrives off the wire is parsed into models rather than read key by key.
+That is what makes the payload's shape reviewable in one place: every field
+this project depends on is declared, so a rename upstream surfaces as one
+validation failure instead of as an empty string at whichever call site asked
+for the key that stopped existing — and an unread field is visibly unread
+rather than merely unmentioned. ``extra="ignore"`` throughout, because the
+service sends a great deal this project has no use for.
+
 Organisations matter more than they look. An account usually has a non-chat
 organisation beside the chat one — the developer console's — and reading
 conversations under the wrong one answers 403, which is indistinguishable from
@@ -16,7 +24,9 @@ the two are the same call, and the spelling without ``.get`` does not read as
 a dictionary lookup to the tooling that audits this repository.
 """
 
+import json
 import logging
+import mimetypes
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from datetime import datetime, timezone
@@ -25,9 +35,9 @@ from pathlib import PurePosixPath
 from urllib.parse import urlparse
 
 import httpx
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, ValidationError, model_validator
 
-from lup.types import JsonValue, StringMap
+from lup.types import JsonObject, JsonValue, StringMap
 
 logger = logging.getLogger(__name__)
 
@@ -92,7 +102,30 @@ class StaticCredentials(CredentialSource):
         return self.value
 
 
-class OrganizationEntry(BaseModel, frozen=True, extra="ignore"):
+class Payload(BaseModel, frozen=True, extra="ignore"):
+    """A model over what the service sends.
+
+    An absent field and a null one mean the same thing here, and the service
+    spells "nothing" both ways within a single payload: one message omits
+    ``compaction_summary`` while the next sends it as null, and a snapshot
+    sends nulls a conversation does not. A model that accepted only the
+    omission would reject a whole conversation over the way one message said
+    nothing — and the rejection would look like the organisation refusing to
+    serve it, which is a long way from the truth.
+
+    So nulls are dropped and each field's own default answers instead.
+    """
+
+    @model_validator(mode="before")
+    @classmethod
+    def absent_where_null(cls, data: JsonValue) -> JsonValue:
+        """Treat a null the service sent as a field it did not send."""
+        if not isinstance(data, dict):
+            return data
+        return {key: value for key, value in data.items() if value is not None}
+
+
+class OrganizationEntry(Payload, frozen=True):
     """One organisation the account belongs to."""
 
     uuid: str
@@ -109,7 +142,7 @@ class OrganizationEntry(BaseModel, frozen=True, extra="ignore"):
         return f"{self.uuid} {self.name or '(unnamed)'} — {capability}"
 
 
-class ConversationMeta(BaseModel, extra="ignore"):
+class ConversationMeta(Payload, frozen=True):
     """A conversation as the listing describes it — no messages."""
 
     uuid: str
@@ -135,6 +168,73 @@ class ConversationMeta(BaseModel, extra="ignore"):
         return sorted(metas, key=lambda meta: meta.updated() or epoch, reverse=True)
 
 
+class Attachment(Payload, frozen=True):
+    """One file uploaded into a conversation.
+
+    claude.ai extracts a text document when it is uploaded and serves the
+    result in the conversation payload, so an entry carries the file's
+    contents rather than a way to fetch them. There is nothing to download.
+
+    A name is not guaranteed — the service serves entries whose ``file_name``
+    is empty — and a name that does arrive was chosen by whoever uploaded it,
+    so it is somebody else's string reaching a path. Both are why the name a
+    file is stored under is decided here, once, rather than at each writer.
+    """
+
+    id: str = ""
+    file_name: str = ""
+    file_size: int = 0
+    file_type: str = ""
+    extracted_content: str = ""
+
+    def extension(self) -> str:
+        """The suffix this file's type implies, empty where it implies none.
+
+        ``file_type`` arrives either as a media type (``text/markdown``) or as
+        a bare suffix (``txt``); the media-type database answers the first and
+        declines the second, which is what tells the two apart without
+        inspecting the string.
+        """
+        if guessed := mimetypes.guess_extension(self.file_type):
+            return guessed
+        return f".{self.file_type}" if self.file_type else ""
+
+    def stored_name(self) -> str:
+        """What to call this file.
+
+        Reduced to a single path component: the name is the uploader's, and a
+        conversation is not entitled to choose where in the filesystem its
+        attachment lands. An entry with neither a name nor a type still gets
+        one, because a file written under no name is a file nobody can open.
+        """
+        named = PurePosixPath(self.file_name).name
+        return named or f"attachment{self.extension()}"
+
+    def relative_path(self) -> PurePosixPath:
+        """Where this file sits under the conversation's attachment directory.
+
+        Each file gets a directory of its own, named by the identifier the
+        service gave it. Two uploads into one conversation can carry the same
+        name — the same ``notes.md`` twice is an ordinary thing to do — and a
+        flat directory would let the second quietly replace the first. The
+        identifier is unique where the name is not, so nesting under it makes
+        that collision impossible rather than merely detectable.
+        """
+        return PurePosixPath(PurePosixPath(self.id).name or "unidentified") / (
+            self.stored_name()
+        )
+
+    def label(self) -> str:
+        """How this attachment is announced in the transcript.
+
+        The path is the point: the passes read the conversation from a
+        directory, and this is what tells them the file is there to open.
+        """
+        return (
+            f"[Attachment: {self.stored_name()} → attachments/{self.relative_path()}]"
+        )
+
+
 class ConversationContent(BaseModel, frozen=True):
     """A whole conversation, rendered to speaker-tagged Markdown."""
 
@@ -144,6 +244,9 @@ class ConversationContent(BaseModel, frozen=True):
     updated_at: str = ""
     markdown: str
     message_count: int
+    attachments: list[Attachment] = []
+    """Every file uploaded across the conversation, for a caller that writes
+    them out beside the transcript the labels point into."""
 
     def started(self) -> datetime | None:
         """When the conversation began."""
@@ -193,9 +296,63 @@ def share_id(share: str) -> str:
     return path.name or share
 
 
+class ConversationReference(BaseModel, frozen=True):
+    """What somebody named: a conversation of the account, or a shared link.
+
+    Which of the two it is, is read from the reference's own shape rather
+    than taken from a flag. Whoever pastes a link should not also have to say
+    what kind of thing they pasted, and the two are told apart by the
+    ``share`` segment a share URL carries — with or without a scheme, since a
+    link copied out of a browser's address bar often arrives without one.
+    """
+
+    value: str
+
+    def shared(self) -> bool:
+        """Whether this names a shared snapshot rather than a conversation."""
+        located = urlparse(self.value)
+        return "share" in PurePosixPath(located.path or self.value).parts
+
+    async def fetch(self, client: "ClaudeWebClient") -> ConversationContent:
+        """The conversation this names, by whichever route serves it."""
+        if self.shared():
+            return await client.snapshot(self.value)
+        return await client.conversation(self.value)
+
+    async def raw(self, client: "ClaudeWebClient") -> JsonValue:
+        """The same payload, before anything decided what to keep of it."""
+        if self.shared():
+            return await client.snapshot_payload(self.value)
+        return await client.conversation_payload(self.value)
+
+    def describe(self) -> str:
+        """This reference as one line saying which route it takes."""
+        kind = "share link" if self.shared() else "conversation"
+        return f"{kind} {share_id(self.value) if self.shared() else self.value}"
+
+
 def has_text(value: JsonValue) -> bool:
     """Whether a value is a string holding something other than whitespace."""
     return isinstance(value, str) and bool(value) and not value.isspace()
+
+
+class RefusalDetails(Payload, frozen=True):
+    """The machine-readable half of a rejection."""
+
+    error_code: str = ""
+
+
+class Refusal(Payload, frozen=True):
+    """What the service said about why it refused."""
+
+    message: str = ""
+    details: RefusalDetails = RefusalDetails()
+
+
+class RefusalBody(Payload, frozen=True):
+    """A rejection envelope, which nests its reason one level down."""
+
+    error: Refusal = Refusal()
 
 
 def refusal_detail(response: httpx.Response) -> str:
@@ -204,136 +361,303 @@ def refusal_detail(response: httpx.Response) -> str:
     The service distinguishes an invalid session from a wrong-organisation one
     in the body, and a bare status code does not — so the body is what tells an
     operator which of the two happened.
+
+    A body that is neither JSON nor the documented envelope leaves the status
+    code to answer alone, which is what it did before there was a body to read.
     """
-    body: JsonValue = None
+    refused = RefusalBody()
     try:
-        body = response.json()
+        refused = RefusalBody.model_validate(response.json())
     except ValueError:
-        logger.debug("claude.ai refused with a non-JSON body")
-    message = code = ""
-    if isinstance(body, dict):
-        # lup: ignore[dict-get] — an error body is open data read off the wire
-        error = body.get("error")
-        if isinstance(error, dict):
-            # lup: ignore[dict-get] — same open payload
-            text, details = error.get("message"), error.get("details")
-            message = text if isinstance(text, str) else ""
-            if isinstance(details, dict):
-                # lup: ignore[dict-get] — same open payload
-                reported = details.get("error_code")
-                code = reported if isinstance(reported, str) else ""
+        logger.debug("claude.ai refused with a body this could not read")
+    code = refused.error.details.error_code
     inside = " ".join(part for part in (str(response.status_code), code) if part)
+    message = refused.error.message
     return f"session rejected ({inside})" + (f": {message}" if message else "")
 
 
-def block_text(block: JsonValue) -> str:
-    """The text one content block carries, empty when it carries none."""
-    if not isinstance(block, dict):
-        return ""
-    # lup: ignore[dict-get] — a message payload is open data read off the wire
-    match block.get("type"):
-        case "image":
-            return ""
-        case "tool_result":
-            nested = block.get("content")  # lup: ignore[dict-get] — same open payload
-            if isinstance(nested, list):
-                return "\n\n".join(
-                    text for item in nested if (text := block_text(item))
+class BlockMetadata(Payload, frozen=True):
+    """Where a page a conversation pulled in came from."""
+
+    site_name: str = ""
+    site_domain: str = ""
+
+    def describe(self) -> str:
+        """The site as one phrase, empty where it named none."""
+        return self.site_name or self.site_domain
+
+
+class ContentBlock(Payload, frozen=True):
+    """One block of a message, in the shapes claude.ai serves them.
+
+    ``content`` is the recursive field: a tool result holds blocks of its own
+    while an ordinary block holds a string, and declaring both is what lets a
+    result be walked without asking what it is at each step.
+
+    Every field the renderer reads is declared here rather than reached for by
+    key. That is not only convention — a block whose shape changes upstream
+    then arrives as a validation failure at one place, instead of as a silently
+    empty string at whichever call site asked for the missing key.
+    """
+
+    type: str = ""
+    text: str = ""
+    content: str | list["ContentBlock"] = ""
+    source: str = ""
+    name: str = ""
+    integration_name: str = ""
+    input: JsonObject | None = None
+    title: str = ""
+    url: str = ""
+    is_missing: bool = False
+    metadata: BlockMetadata | None = None
+    file_path: str = ""
+    table: JsonValue = None
+    json_block: JsonValue = None
+    is_error: bool = False
+    message: str = ""
+    display_content: JsonValue = None
+
+    def call_text(self) -> str:
+        """This tool call as text, arguments and all.
+
+        A call is where a conversation reaches outside itself, and its
+        arguments are what it reached for — a mail search, a file's contents,
+        a query. That makes them exactly the material the sensitivity test is
+        about: a thread pulled in from an inbox belongs to somebody who is not
+        in the conversation and did not choose to be discussed. A reviewer
+        that cannot see the call cannot redact what the call brought back.
+
+        The arguments are re-encoded rather than pasted, so an argument that
+        happens to contain the speaker tags this transcript is delimited by
+        cannot forge one.
+        """
+        via = f" via {self.integration_name}" if self.integration_name else ""
+        called = f"[tool call: {self.name or '(unnamed tool)'}{via}]"
+        if self.input is None:
+            # The service sends no arguments for some calls. Spelling that
+            # "null" would read as an argument whose value was null, which is
+            # a different claim about what the conversation did.
+            return f"{called}\n(the payload carried no arguments for this call)"
+        spelled = json.dumps(self.input, indent=2, ensure_ascii=False, default=str)
+        return f"{called}\n{spelled}"
+
+    def fetched_text(self) -> str:
+        """One page the conversation pulled in, by title and address.
+
+        A search result is material from outside the conversation, about
+        whoever the page is about — the third party the sensitivity test names,
+        who is not present and did not choose to be discussed. A reviewer that
+        cannot see which pages were read cannot redact what they brought in,
+        and a page that rendered as nothing leaves no sign it was ever there.
+        """
+        site = self.metadata.describe() if self.metadata is not None else ""
+        where = " — ".join(part for part in (self.url, site) if part)
+        missing = " (not retrieved)" if self.is_missing else ""
+        titled = f"[web result: {self.title or '(untitled)'}{missing}]"
+        return f"{titled}\n{where}" if where else titled
+
+    def resource_text(self) -> str:
+        """A file the conversation referred to, named where it sat."""
+        where = f" — {self.file_path}" if self.file_path else ""
+        return f"[file: {self.name or '(unnamed)'}{where}]"
+
+    def structured_text(self) -> str:
+        """A block whose content is data rather than prose.
+
+        Re-encoded rather than pasted, for the reason ``call_text`` gives: a
+        value holding this transcript's own speaker tags cannot forge one.
+        """
+        held = self.table if self.table is not None else self.json_block
+        spelled = json.dumps(held, indent=2, ensure_ascii=False, default=str)
+        return f"[{self.type}]\n{spelled}"
+
+    def nested(self) -> str:
+        """Everything a tool result came back with.
+
+        The service puts what a result says in whichever of three places
+        suits it — ``content``, ``display_content``, or a bare ``message`` —
+        and reading only the first leaves a result that spoke rendering as a
+        result that said nothing. Whether it failed is kept too: a reviewer
+        weighing what a call brought back should not have to guess that it
+        brought back nothing because it errored.
+        """
+        match self.content:
+            case str() as held:
+                body = held
+            case blocks:
+                body = "\n\n".join(
+                    text for block in blocks if (text := block.text_payload())
                 )
-            return nested if isinstance(nested, str) else ""
-        case _:
-            for field in ("text", "content", "source"):
-                value = block.get(field)  # lup: ignore[dict-get] — same open payload
-                if isinstance(value, str) and value:
-                    return value
+        shown = (
+            self.display_content
+            if isinstance(self.display_content, str)
+            else json.dumps(
+                self.display_content, indent=2, ensure_ascii=False, default=str
+            )
+            if self.display_content is not None
+            else ""
+        )
+        failed = "[the tool reported an error]" if self.is_error else ""
+        return "\n\n".join(part for part in (failed, body, self.message, shown) if part)
+
+    def text_payload(self) -> str:
+        """What this block says, empty where it says nothing.
+
+        An image says that it is there. It cannot be reproduced in a text
+        transcript, and rendering it as nothing would leave the reviewer
+        deciding about a conversation with a hole in it that looks like no
+        hole at all.
+        """
+        match self.type:
+            case "image":
+                return "[an image was in the conversation here, not reproduced]"
+            case "tool_use":
+                return self.call_text()
+            case "tool_result":
+                return self.nested()
+            case "knowledge":
+                return self.fetched_text()
+            case "local_resource":
+                return self.resource_text()
+            case "table" | "json_block":
+                return self.structured_text()
+            case _:
+                inline = self.content if isinstance(self.content, str) else ""
+                return next(
+                    (value for value in (self.text, inline, self.source) if value), ""
+                )
+
+
+class Message(Payload, frozen=True):
+    """One turn of a conversation, with everything it carried."""
+
+    uuid: str = ""
+    sender: str = ""
+    content: str | list[ContentBlock] = ""
+    attachments: list[Attachment] = []
+    file_count: int = 0
+    image_count: int = 0
+    truncated: bool = False
+    compaction_summary: str = ""
+
+    def blocks(self) -> list[str]:
+        """What this message's content says."""
+        match self.content:
+            case str():
+                return [self.content] if self.content else list[str]()
+            case blocks:
+                return [text for block in blocks if (text := block.text_payload())]
+
+    def uploaded(self) -> list[str]:
+        """Each attachment, announced by where it was written and then quoted.
+
+        The path is the point: the passes read the conversation from a
+        directory, and the label is what sends them to the file.
+        """
+        return [
+            f"{attachment.label()}\n{attachment.extracted_content}"
+            for attachment in self.attachments
+            if has_text(attachment.extracted_content)
+        ]
+
+    def notes(self) -> list[str]:
+        """What this message says about itself that its content does not.
+
+        Each of these is the service reporting that the text beside it is not
+        all of what was said. A transcript that drops them reads as complete
+        while it is not, which is the one failure a redaction pass cannot
+        recover from: the reviewer allows what it never saw.
+        """
+        tallies = [
+            f"{count} {noun if count == 1 else noun + 's'}"
+            for count, noun in ((self.file_count, "file"), (self.image_count, "image"))
+            if count
+        ]
+        return [
+            note
+            for note in (
+                f"[this message carried {' and '.join(tallies)}, not reproduced here]"
+                if tallies
+                else "",
+                f"[the service compacted this message, summarising it as]\n"
+                f"{self.compaction_summary}"
+                if has_text(self.compaction_summary)
+                else "",
+                "[the service reports this message as truncated]"
+                if self.truncated
+                else "",
+            )
+            if note
+        ]
+
+    def spoken(self) -> str:
+        """This message as one speaker-tagged span, empty where it said nothing.
+
+        The ``<user>``/``<claude>`` tags are what tell the reviewer who said
+        what, which every judgement about whose information is being disclosed
+        depends on.
+        """
+        body = "\n\n".join(self.blocks() + self.uploaded() + self.notes())
+        if not has_text(body):
             return ""
+        speaker = "user" if self.sender == "human" else "claude"
+        return f"<{speaker}>\n{body}\n</{speaker}>"
 
 
-def attachment_texts(message: JsonValue) -> list[str]:
-    """Text extracted from a message's uploaded files.
+class ConversationPayload(Payload, frozen=True):
+    """A conversation or a shared snapshot, as the service serves either.
 
-    Attachments are part of what was said. Dropping them would hand the
-    reviewer a conversation whose subject is a document it cannot see.
+    One model for both. A snapshot titles itself ``snapshot_name`` and carries
+    no ``name``; everything else about the two is the same shape. Two models
+    would mean two renderers, and the second would be the one that fell behind
+    — so the difference is a field that may be absent rather than a type.
     """
-    if not isinstance(message, dict):
-        return list[str]()
-    # lup: ignore[dict-get] — a message payload is open data read off the wire
-    attachments = message.get("attachments")
-    if not isinstance(attachments, list):
-        return list[str]()
 
-    def texts() -> Iterator[str]:
-        for attachment in attachments:
-            if not isinstance(attachment, dict):
-                continue
-            # lup: ignore[dict-get] — same open payload
-            content = attachment.get("extracted_content")
-            if not isinstance(content, str) or not has_text(content):
-                continue
-            # lup: ignore[dict-get] — same open payload
-            name = attachment.get("file_name")
-            label = f"[Attachment: {name}]\n" if isinstance(name, str) and name else ""
-            yield f"{label}{content}"
+    uuid: str = ""
+    name: str = ""
+    snapshot_name: str = ""
+    created_at: str = ""
+    updated_at: str = ""
+    chat_messages: list[Message] = []
 
-    return list(texts())
+    def attachments(self) -> list[Attachment]:
+        """Every file uploaded anywhere in the conversation."""
+        return [
+            attachment
+            for message in self.chat_messages
+            for attachment in message.attachments
+        ]
 
+    def content(self, identifier: str) -> ConversationContent:
+        """This payload as the rendered conversation the passes read.
 
-def message_markdown(message: JsonValue) -> str:
-    """One message's blocks and attachments as a single body of text."""
-    if not isinstance(message, dict):
-        return ""
-    # lup: ignore[dict-get] — a message payload is open data read off the wire
-    content = message.get("content")
-    match content:
-        case str():
-            blocks = [content]
-        case list():
-            blocks = [text for block in content if (text := block_text(block))]
-        case _:
-            blocks = list[str]()
-    return "\n\n".join(blocks + attachment_texts(message))
+        ``identifier`` is what the caller asked for — a conversation id or a
+        share id — and stands in where the payload names no uuid of its own.
+        """
+        spoken = [text for message in self.chat_messages if (text := message.spoken())]
+        if not spoken:
+            raise ClaudeWebError(f"conversation {identifier} has no readable messages")
+        return ConversationContent(
+            uuid=self.uuid or identifier,
+            name=self.name or self.snapshot_name,
+            created_at=self.created_at,
+            updated_at=self.updated_at,
+            markdown="\n\n".join(spoken),
+            message_count=len(spoken),
+            attachments=self.attachments(),
+        )
 
 
-def rendered_conversation(uuid: str, payload: JsonValue) -> ConversationContent:
-    """A conversation payload as speaker-tagged Markdown.
-
-    The ``<user>``/``<claude>`` tags are what tell the reviewer who said what,
-    which every downstream judgement about whose information is being disclosed
-    depends on.
-    """
-    if not isinstance(payload, dict):
-        raise ClaudeWebError(f"conversation {uuid} came back in an unexpected shape")
-
-    def field(name: str) -> str:
-        # lup: ignore[dict-get] — a conversation payload is open data off the wire
-        value = payload.get(name)
-        return value if isinstance(value, str) else ""
-
-    messages = payload.get("chat_messages")  # lup: ignore[dict-get] — same open payload
-    turns = messages if isinstance(messages, list) else list[JsonValue]()
-
-    def spoken() -> Iterator[str]:
-        for message in turns:
-            if not isinstance(message, dict):
-                continue
-            sender = message.get("sender")  # lup: ignore[dict-get] — same open payload
-            body = message_markdown(message)
-            if not isinstance(sender, str) or not has_text(body):
-                continue
-            speaker = "user" if sender == "human" else "claude"
-            yield f"<{speaker}>\n{body}\n</{speaker}>"
-
-    parts = list(spoken())
-    if not parts:
-        raise ClaudeWebError(f"conversation {uuid} has no readable messages")
-    return ConversationContent(
-        uuid=field("uuid") or uuid,
-        name=field("name"),
-        created_at=field("created_at"),
-        updated_at=field("updated_at"),
-        markdown="\n\n".join(parts),
-        message_count=len(parts),
-    )
+def rendered_conversation(identifier: str, payload: JsonValue) -> ConversationContent:
+    """A conversation payload as speaker-tagged Markdown."""
+    try:
+        parsed = ConversationPayload.model_validate(payload)
+    except ValidationError as error:
+        raise ClaudeWebError(
+            f"conversation {identifier} came back in an unexpected shape"
+        ) from error
+    return parsed.content(identifier)
 
 
 class PathBuilder(BaseModel, frozen=True):
@@ -342,6 +666,15 @@ class PathBuilder(BaseModel, frozen=True):
     @abstractmethod
     def path(self, organization: str) -> str:
         """This request's path under ``organization``."""
+
+    def extra_headers(self) -> StringMap:
+        """Headers this kind of request needs beyond the session's own.
+
+        Declared here so a request that needs one carries it, rather than the
+        one method that sends every request growing a parameter for each kind
+        that turned out to be special.
+        """
+        return {}
 
 
 class ConversationListing(PathBuilder, frozen=True):
@@ -366,6 +699,26 @@ class ConversationDetail(PathBuilder, frozen=True):
             f"/api/organizations/{organization}/chat_conversations/"
             f"{self.uuid}?{RENDER_PARAMS}"
         )
+
+
+class SnapshotDetail(PathBuilder, frozen=True):
+    """One shared conversation, as the organisation holding it serves it.
+
+    The referring page is part of the request: the service serves a snapshot
+    to whoever arrived at its share page, and a request that names no such
+    page is answered as though the link had not been followed.
+    """
+
+    share: str
+
+    def path(self, organization: str) -> str:
+        return (
+            f"/api/organizations/{organization}/chat_snapshots/"
+            f"{self.share}?{RENDER_PARAMS}"
+        )
+
+    def extra_headers(self) -> StringMap:
+        return {"Referer": f"{BASE_URL}/share/{self.share}"}
 
 
 class ClaudeWebClient:
@@ -498,7 +851,7 @@ class ClaudeWebClient:
                     response = await client.request(
                         "GET",
                         f"{BASE_URL}{request.path(organization)}",
-                        headers=self.headers(cookie),
+                        headers={**self.headers(cookie), **request.extra_headers()},
                     )
                     if response.status_code in (401, 403):
                         raise SessionExpired(refusal_detail(response))
@@ -537,7 +890,77 @@ class ClaudeWebClient:
 
         return list(recent())
 
+    async def conversation_payload(self, uuid: str) -> JsonValue:
+        """One conversation exactly as the service sent it.
+
+        Separate from :meth:`conversation` so what arrived can be examined
+        without going through the models that decide what to keep of it —
+        which is the only way to see what they drop.
+        """
+        return await self.fetch(ConversationDetail(uuid=uuid))
+
     async def conversation(self, uuid: str) -> ConversationContent:
         """One conversation, every message, as Markdown."""
-        payload = await self.fetch(ConversationDetail(uuid=uuid))
-        return rendered_conversation(uuid, payload)
+        return rendered_conversation(uuid, await self.conversation_payload(uuid))
+
+    async def public_snapshot(self, share: str) -> JsonValue | None:
+        """A share link as anyone holding it sees it, or nothing where the
+        service declines to serve it without a session."""
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            response = await client.request(
+                "GET",
+                f"{BASE_URL}/api/chat_snapshots/{share}?{RENDER_PARAMS}",
+                headers=CLAUDE_HEADERS,
+            )
+        if response.status_code != 200:
+            logger.debug(
+                "the public snapshot endpoint answered %s", response.status_code
+            )
+            return None
+        return response.json()
+
+    async def snapshot(self, share: str) -> ConversationContent:
+        """A shared conversation, rendered."""
+        identifier = share_id(share)
+        return rendered_conversation(
+            identifier, await self.snapshot_payload(identifier)
+        )
+
+    async def snapshot_payload(self, share: str) -> JsonValue:
+        """A conversation from a share link or a bare share id.
+
+        Anonymously first, because a link that needs no session should not
+        spend one. A snapshot the service declines to serve that way is asked
+        for under each organisation the account belongs to: a share link names
+        no organisation, and the one holding it need not be the one this
+        account's own conversations are read under.
+
+        Each attempt goes through :meth:`fetch` on a client pinned to that
+        organisation, so a share reaches the same session refresh and the same
+        refusal reading as everything else here.
+        """
+        identifier = share_id(share)
+        if (public := await self.public_snapshot(identifier)) is not None:
+            return public
+
+        request = SnapshotDetail(share=identifier)
+        refused: ClaudeWebError | None = None
+        for entry in await self.account_organizations():
+            pinned = ClaudeWebClient(
+                self.source, timeout=self.timeout, organization=entry.uuid
+            )
+            try:
+                served = await pinned.fetch(request)
+            except ClaudeWebError as error:
+                logger.debug("%s does not serve snapshot %s", entry.uuid, identifier)
+                refused = error
+                continue
+            # Outside the guard on purpose. Only a refusal means "ask the next
+            # organisation" — anything else this payload turns out to be wrong
+            # about is its own problem wherever it came from, and continuing
+            # here would report the last organisation's refusal for a snapshot
+            # the first one served.
+            return served
+        raise refused or ClaudeWebError(
+            f"no organisation on this account serves snapshot {identifier}"
+        )

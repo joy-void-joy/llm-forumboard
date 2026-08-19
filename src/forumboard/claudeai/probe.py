@@ -15,10 +15,14 @@ Every call is a read. It lists organisations and conversations, and touches
 neither a cursor nor Notion.
 """
 
+from collections import Counter
+from collections.abc import Iterator
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from pydantic import BaseModel
+
+from lup.types import JsonValue
 
 from forumboard.agent.config import settings
 from forumboard.claudeai.browser import (
@@ -27,13 +31,157 @@ from forumboard.claudeai.browser import (
     stored_credentials,
 )
 from forumboard.claudeai.client import (
+    Attachment,
+    BlockMetadata,
     ClaudeCredentials,
     ClaudeWebClient,
     ClaudeWebError,
+    ContentBlock,
+    ConversationMeta,
+    ConversationPayload,
+    Message,
     OrganizationEntry,
     StaticCredentials,
 )
 from forumboard.store import ConversationStore
+
+
+class PayloadAudit(BaseModel, frozen=True):
+    """What a conversation payload carried, against what the models read.
+
+    The payload models ignore fields they do not declare. That is deliberate —
+    it is what keeps one new upstream key from rejecting a whole conversation
+    — and it is also the one way material reaches this repository and is lost
+    without anything saying so. Redaction can only remove what it can see, and
+    a pass cannot judge a field that never became text.
+
+    So the ignoring is made answerable: every key the service sent that
+    carries something, set against the names the models read. What lands under
+    ``dropped`` is not necessarily a bug, but it is the complete list of places
+    one could be hiding.
+    """
+
+    # lup: ignore[dict-str-payload] — keyed by whatever the service sent
+    read: dict[str, int] = {}
+    # lup: ignore[dict-str-payload] — the same, for what nothing reads
+    dropped: dict[str, int] = {}
+    # lup: ignore[dict-str-payload] — keyed by the block kinds it served
+    kinds: dict[str, int] = {}
+
+    @classmethod
+    def over(cls, payload: JsonValue) -> "PayloadAudit":
+        """Audit one payload, exactly as the service sent it."""
+        carried = Counter(cls.carried(payload))
+        known = {
+            name
+            for model in (
+                ConversationPayload,
+                Message,
+                ContentBlock,
+                BlockMetadata,
+                Attachment,
+                ConversationMeta,
+                OrganizationEntry,
+            )
+            for name in model.model_fields
+        }
+        return cls(
+            read={key: n for key, n in sorted(carried.items()) if key in known},
+            dropped={key: n for key, n in sorted(carried.items()) if key not in known},
+            kinds=dict(sorted(Counter(cls.kinds_of(payload)).items())),
+        )
+
+    @classmethod
+    def fields_on(cls, value: JsonValue, kind: str) -> Iterator[str]:
+        """Every field name carried by blocks calling themselves ``kind``.
+
+        What a kind is made of decides how it can be rendered, and guessing
+        that from a name is how a renderer comes to read a key the service
+        does not send.
+        """
+        match value:
+            case {"type": str() as served, **rest} if served == kind:
+                for key, held in rest.items():
+                    if held not in (None, "", [], {}):
+                        yield key
+            case _:
+                pass
+        match value:
+            case dict():
+                for held in value.values():
+                    yield from cls.fields_on(held, kind)
+            case list():
+                for held in value:
+                    yield from cls.fields_on(held, kind)
+            case _:
+                return
+
+    @classmethod
+    def kinds_of(cls, value: JsonValue) -> Iterator[str]:
+        """Every ``type`` the payload's blocks call themselves.
+
+        The renderer dispatches on this, so a kind it does not name falls
+        through to the general case. Listing the kinds actually served is what
+        says whether that fallthrough is a default or a hole.
+        """
+        match value:
+            case {"type": str() as kind} if kind:
+                yield kind
+            case _:
+                pass
+        match value:
+            case dict():
+                for held in value.values():
+                    yield from cls.kinds_of(held)
+            case list():
+                for held in value:
+                    yield from cls.kinds_of(held)
+            case _:
+                return
+
+    @classmethod
+    def carried(cls, value: JsonValue) -> Iterator[str]:
+        """Every key anywhere in ``value`` that arrived holding something.
+
+        Empty strings, empty lists and nulls are not yielded: the service
+        spells "this message had none of that" in all three, and a key that
+        only ever arrives empty is not material anybody lost.
+
+        A tool call's ``input`` is not descended into. It is declared as raw
+        JSON and rendered whole, so its own keys are already in the transcript
+        — walking them would report a tool's every argument name as dropped
+        material, which is the opposite of true.
+        """
+        match value:
+            case dict():
+                for key, held in value.items():
+                    if held not in (None, "", [], {}):
+                        yield key
+                    if key != "input":
+                        yield from cls.carried(held)
+            case list():
+                for held in value:
+                    yield from cls.carried(held)
+            case _:
+                return
+
+    def lines(self) -> list[str]:
+        """This audit as an operator reads it."""
+        return [
+            f"read {len(self.read)} field(s), dropped {len(self.dropped)}",
+            "",
+            "read:",
+            *[f"  {key} ×{count}" for key, count in self.read.items()],
+            "",
+            "dropped — carried something, nothing reads it:",
+            *(
+                [f"  {key} ×{count}" for key, count in self.dropped.items()]
+                or ["  (nothing)"]
+            ),
+            "",
+            "block kinds served:",
+            *[f"  {kind} ×{count}" for kind, count in self.kinds.items()],
+        ]
 
 
 class OrganizationProbe(BaseModel, frozen=True):
