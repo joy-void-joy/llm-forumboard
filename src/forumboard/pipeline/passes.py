@@ -30,7 +30,11 @@ from forumboard.agent.models import (
     ReviewResult,
     ReviewVerdict,
 )
-from forumboard.agent.prompts import briefing_prompt, editor_prompt, reviewer_prompt
+from forumboard.agent.prompts.catalog import (
+    briefing_prompt,
+    editor_prompt,
+    reviewer_prompt,
+)
 from forumboard.store import ATTACHMENTS_DIR, PAGE_FILE, TRANSCRIPT_FILE
 
 logger = logging.getLogger(__name__)
@@ -84,6 +88,7 @@ async def review(title: str, folder: Path) -> ReviewVerdict:
         output=ReviewResult,
         workspace=folder,
         tools=READING_TOOLS,
+        label="review",
     )
     return result.verdict
 
@@ -102,6 +107,7 @@ async def edit(title: str, folder: Path, plan: ReviewPlan) -> EditVerdict:
         output=EditResult,
         workspace=folder,
         tools=EDITING_TOOLS,
+        label="edit",
     )
     return result.outcome
 
@@ -112,4 +118,5 @@ async def briefing(cadence: str, window: str, discussions: str) -> Briefing:
         system_prompt=briefing_prompt(cadence, window),
         task=f"<discussions>\n{discussions}\n</discussions>",
         output=Briefing,
+        label=f"briefing {cadence}",
     )
