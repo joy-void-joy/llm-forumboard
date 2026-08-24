@@ -22,7 +22,7 @@
             "type": "command"
           }
         ],
-        "matcher": "Bash|WebFetch|Edit|Write|Artifact|Skill"
+        "matcher": "Bash|WebFetch|Edit|Write"
       }
     ]
   }

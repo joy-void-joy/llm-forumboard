@@ -76,32 +76,17 @@ Each is a requirement the boundary cannot express any other way, and the
 count is the point: an exclusion is not a widened rule but a removed one, so
 the list stays as short as the toolchain's actual incompatibilities."""
 
-ARTIFACT_REFUSAL = (
-    "publishing a page leaves the repository, and this project already owns"
-    " surfaces that do not — run `uv run lup-devtools report` for everything"
-    " left to implement, or the report skill to write it whole to tmp/report.md"
-)
-"""Why an artifact is the wrong reflex here, and what answers the same need.
-
-The redirect is the point rather than the refusal, exactly as the
-generated-tree refusal names the source to edit instead of only saying no. A
-report that leaves the repository is one nothing in this project can read
-back; the report surface is where the same question is answered in a place
-every later session, scan, and gate can reach.
-"""
-
-REFUSED_TOOLS = [
-    RefusedTool(tool="Artifact", reason=ARTIFACT_REFUSAL),
-    RefusedTool(tool="Skill", specifier="artifact-design", reason=ARTIFACT_REFUSAL),
-]
+REFUSED_TOOLS: list[RefusedTool] = []
 """The calls this project has decided against, each naming what to reach for.
 
-Both are Claude Code's spellings, and it is there the reflex they stop exists.
-Every runtime consults the table all the same, because which names are worth
-refusing is this declaration's answer rather than an adapter's — so a name
-Codex does offer would be refused there by writing one line here. Neither is
-walled off — a deliberate use escalates with the marker the shell lattice
-already uses, and gets an approval question carrying its own stated reason.
+Empty is a position rather than an absence: this project refuses no tool
+outright, and the table subtracts nothing from what a runtime already allows.
+Every runtime consults it all the same, because which names are worth refusing
+is this declaration's answer rather than an adapter's — so a name only one
+runtime offers would be refused everywhere by writing one line here. A row
+never walls its subject off: a deliberate use escalates with the marker the
+shell lattice already uses, and gets an approval question carrying its own
+stated reason.
 """
 
 HARNESS_SESSION = "harness"

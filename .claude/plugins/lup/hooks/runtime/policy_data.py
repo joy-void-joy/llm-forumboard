@@ -7067,18 +7067,7 @@ SHELL_RULES: list[ShellRuleRow] = [
     },
 ]
 
-REFUSED_TOOLS: list[RefusedToolRow] = [
-    {
-        "tool": "Artifact",
-        "specifier": "",
-        "reason": "publishing a page leaves the repository, and this project already owns surfaces that do not \u2014 run `uv run lup-devtools report` for everything left to implement, or the report skill to write it whole to tmp/report.md",
-    },
-    {
-        "tool": "Skill",
-        "specifier": "artifact-design",
-        "reason": "publishing a page leaves the repository, and this project already owns surfaces that do not \u2014 run `uv run lup-devtools report` for everything left to implement, or the report skill to write it whole to tmp/report.md",
-    },
-]
+REFUSED_TOOLS: list[RefusedToolRow] = []
 
 AUTONOMOUS_AGENT_IDENTITIES: list[str] = [
     "resolver-worker",

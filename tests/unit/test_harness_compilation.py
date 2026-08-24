@@ -117,6 +117,7 @@ from forumboard.devtools.agent.serve import (
 from lup.devtools.dev.rules import rule_reference_artifact
 from forumboard.devtools.harness.catalog import (
     HARNESS_SESSION,
+    REFUSED_TOOLS,
     declared_hook_set,
     portable_harness,
 )
@@ -1561,34 +1562,33 @@ def test_generated_codex_permission_request_denies_unapproved_code() -> None:
     assert b"interpreters" in result.stderr
 
 
-def test_generated_codex_hook_refuses_the_declared_calls() -> None:
-    """The refusal table is consulted on both runtimes, not only on Claude.
+def test_refusing_nothing_routes_no_tool_to_be_refused() -> None:
+    """This project declares no refusal, so no matcher carries one.
 
-    Everything the refusal is made of is portable — the field on ``HookSet``,
-    the kernel module both trees carry, the rows this renderer emits — so a
-    tree that shipped all of it and never asked would read as a refusal in
-    force while the call went through. These two names are Claude's own
-    spellings and match nothing Codex offers; what is pinned is that the
-    mechanism reaches this dispatcher, for whatever an adopter refuses here.
+    Routing is what a refusal widens, and the matcher is where that lands, so
+    an empty table has to leave these names out of it entirely. A name routed
+    with no row behind it is the failure worth pinning: the dispatcher would
+    reach the conservative ``ask`` an unclassified tool earns and refuse a
+    call nobody wrote a reason for. ``Skill`` is the case that bites hardest,
+    because every invocation of it would reach a human. What a row that does
+    exist then decides is pinned against fixture rows in
+    ``test_semantic_policy``, which owns those semantics for both runtimes.
     """
-    hook = sh.Command(str(Path(".codex/plugins/lup/hooks/scripts/policy.py").resolve()))
+    assert not REFUSED_TOOLS
 
-    def run(name: str, payload: JsonObject) -> sh.RunningCommand:
-        body = json.dumps({"tool_name": name, "tool_input": payload})
-        result = hook(_in=body, _ok_code=[0, 2], _return_cmd=True)
-        assert isinstance(result, sh.RunningCommand)
-        return result
+    for target, plugin_root in ((claude_target, ".claude"), (codex_target, ".codex")):
+        artifacts = {
+            artifact.path: artifact
+            for artifact in target(Path.cwd()).recipe.desired.artifacts
+        }
+        registered = json.loads(
+            artifacts[Path(f"{plugin_root}/plugins/lup/hooks/hooks.json")].content
+        )["hooks"]
 
-    refused = run("Artifact", {"content": "a page"})
-    assert refused.exit_code == 2
-    assert b"lup-devtools report" in refused.stderr
-
-    narrowed = run("Skill", {"skill": "artifact-design"})
-    assert narrowed.exit_code == 2
-
-    other = run("Skill", {"skill": "lup:commit"})
-    assert other.exit_code == 0
-    assert other.stdout == b""
+        for event in registered.values():
+            for entry in event:
+                assert "Artifact" not in entry["matcher"]
+                assert "Skill" not in entry["matcher"]
 
 
 def test_generated_codex_hook_allows_managed_skill_scripts(
@@ -1637,47 +1637,6 @@ def test_generated_claude_hook_allows_managed_skill_scripts(
     assert decision("node /tmp/untrusted-script.mjs") == "deny"
     workspace_script = Path(".claude/plugins/lup/scripts/file_suggest.sh").resolve()
     assert decision(f"sh {workspace_script}") == "deny"
-
-
-def test_generated_claude_hook_refuses_the_declared_calls() -> None:
-    """The refusal this repository declares, as the shipped hook enforces it.
-
-    Routing is half the mechanism and the declared rows are the other half,
-    so this goes through the compiled script rather than the kernel beneath
-    it: a row the hook is never handed refuses nothing, and no unit below
-    this level would notice.
-    """
-    script = Path(".claude/plugins/lup/hooks/scripts/policy.py").resolve()
-
-    def decision(name: str, payload: JsonObject) -> ClaudeHookDecision:
-        body = {"tool_name": name, "tool_input": payload}
-        result = sh.Command(str(script))(_in=json.dumps(body), _return_cmd=True)
-        assert isinstance(result, sh.RunningCommand)
-        return ClaudeHookOutput.model_validate_json(result.stdout).hook_specific_output
-
-    refused = decision("Artifact", {"content": "a page"})
-    assert refused.permission_decision == "deny"
-    assert "lup-devtools report" in refused.permission_decision_reason
-
-    narrowed = decision("Skill", {"skill": "artifact-design"})
-    assert narrowed.permission_decision == "deny"
-
-    escalated = decision(
-        "Artifact", {"content": "# lup: escalate: the user asked for a page\npage"}
-    )
-    assert escalated.permission_decision == "ask"
-
-
-def test_generated_claude_hook_leaves_every_other_skill_to_the_runtime() -> None:
-    """Routing `Skill` must not put every skill invocation to a human."""
-    script = Path(".claude/plugins/lup/hooks/scripts/policy.py").resolve()
-    result = sh.Command(str(script))(
-        _in='{"tool_name":"Skill","tool_input":{"skill":"lup:commit"}}',
-        _return_cmd=True,
-    )
-
-    assert isinstance(result, sh.RunningCommand)
-    assert json.loads(result.stdout) == {}
 
 
 def test_generated_claude_hook_executes_the_canonical_kernel() -> None:

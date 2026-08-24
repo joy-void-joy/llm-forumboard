@@ -10,7 +10,7 @@
             "type": "command"
           }
         ],
-        "matcher": "Bash|web_fetch|apply_patch|Artifact|Skill"
+        "matcher": "Bash|web_fetch|apply_patch"
       }
     ],
     "PostToolUse": [
@@ -36,7 +36,7 @@
             "type": "command"
           }
         ],
-        "matcher": "Bash|web_fetch|apply_patch|Artifact|Skill"
+        "matcher": "Bash|web_fetch|apply_patch"
       }
     ]
   }
